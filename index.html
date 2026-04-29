@@ -3,7 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
   <title>工程出工管理平台</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver/dist/FileSaver.min.js"></script>
+
   <style>
     :root{
       --bg:#f4f7fb;
@@ -14,11 +19,17 @@
       --primary:#2563eb;
       --primary-dark:#1d4ed8;
       --danger:#dc2626;
+      --danger-bg:#fee2e2;
       --success:#16a34a;
+      --success-bg:#dcfce7;
+      --info-bg:#eff6ff;
+      --info:#1e40af;
       --disabled:#cbd5e1;
     }
 
-    *{box-sizing:border-box}
+    *{
+      box-sizing:border-box;
+    }
 
     body{
       margin:0;
@@ -28,22 +39,22 @@
     }
 
     .app{
-      max-width:880px;
+      max-width:980px;
       margin:0 auto;
       padding:16px;
-      padding-bottom:80px;
+      padding-bottom:90px;
     }
 
-    .title{
-      font-size:24px;
+    .app-title{
+      font-size:25px;
       font-weight:900;
       margin:8px 0 4px;
     }
 
-    .subtitle{
-      color:var(--muted);
+    .app-subtitle{
       font-size:13px;
-      margin-bottom:16px;
+      color:var(--muted);
+      margin-bottom:14px;
     }
 
     .card{
@@ -59,6 +70,20 @@
       font-size:18px;
       font-weight:900;
       margin:6px 0 12px;
+    }
+
+    .topbar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:12px;
+    }
+
+    .topbar button{
+      width:auto;
+      padding:9px 12px;
+      font-size:13px;
     }
 
     .grid{
@@ -78,6 +103,13 @@
       gap:8px;
     }
 
+    @media (max-width:640px){
+      .grid-2,
+      .grid-3{
+        grid-template-columns:1fr;
+      }
+    }
+
     label{
       font-size:13px;
       color:#374151;
@@ -86,7 +118,9 @@
       margin-bottom:6px;
     }
 
-    input,select,textarea{
+    input,
+    select,
+    textarea{
       width:100%;
       border:1px solid var(--line);
       background:#fff;
@@ -101,7 +135,9 @@
       resize:vertical;
     }
 
-    input:focus,select:focus,textarea:focus{
+    input:focus,
+    select:focus,
+    textarea:focus{
       border-color:var(--primary);
       box-shadow:0 0 0 3px rgba(37,99,235,.12);
     }
@@ -118,7 +154,9 @@
       color:#fff;
     }
 
-    button:hover{background:var(--primary-dark)}
+    button:hover{
+      background:var(--primary-dark);
+    }
 
     button:disabled{
       background:var(--disabled);
@@ -131,44 +169,26 @@
       color:#1e40af;
     }
 
-    .btn-secondary:hover{background:#dbe7ff}
+    .btn-secondary:hover{
+      background:#dbe7ff;
+    }
 
     .btn-danger{
       background:#fee2e2;
       color:#991b1b;
     }
 
-    .btn-danger:hover{background:#fecaca}
+    .btn-danger:hover{
+      background:#fecaca;
+    }
 
     .btn-ghost{
       background:#f1f5f9;
       color:#334155;
     }
 
-    .hide{display:none!important}
-
-    .topbar{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      margin-bottom:12px;
-    }
-
-    .topbar button{
-      width:auto;
-      padding:9px 12px;
-      font-size:13px;
-    }
-
-    .nav{
-      display:grid;
-      gap:10px;
-    }
-
-    .nav button{
-      text-align:left;
-      padding:16px;
+    .hide{
+      display:none!important;
     }
 
     .msg{
@@ -178,25 +198,28 @@
       margin-bottom:12px;
       display:none;
       white-space:pre-wrap;
+      line-height:1.5;
     }
 
-    .msg.show{display:block}
+    .msg.show{
+      display:block;
+    }
 
     .msg.ok{
-      background:#dcfce7;
+      background:var(--success-bg);
       color:#166534;
       border:1px solid #86efac;
     }
 
     .msg.err{
-      background:#fee2e2;
+      background:var(--danger-bg);
       color:#991b1b;
       border:1px solid #fecaca;
     }
 
     .msg.info{
-      background:#eff6ff;
-      color:#1e40af;
+      background:var(--info-bg);
+      color:var(--info);
       border:1px solid #bfdbfe;
     }
 
@@ -210,6 +233,16 @@
       height:1px;
       background:var(--line);
       margin:14px 0;
+    }
+
+    .nav{
+      display:grid;
+      gap:10px;
+    }
+
+    .nav button{
+      text-align:left;
+      padding:16px;
     }
 
     .tabs{
@@ -233,8 +266,14 @@
 
     .stat-row{
       display:grid;
-      grid-template-columns:1fr 1fr;
+      grid-template-columns:1fr 1fr 1fr;
       gap:10px;
+    }
+
+    @media (max-width:640px){
+      .stat-row{
+        grid-template-columns:1fr 1fr;
+      }
     }
 
     .stat{
@@ -256,6 +295,25 @@
       margin-top:4px;
     }
 
+    .hour-box{
+      background:#f8fafc;
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:12px;
+      line-height:1.8;
+      font-size:14px;
+    }
+
+    .today-records{
+      background:#fff7ed;
+      border:1px solid #fed7aa;
+      color:#9a3412;
+      border-radius:14px;
+      padding:12px;
+      font-size:13px;
+      line-height:1.6;
+    }
+
     .week-wrap{
       overflow-x:auto;
       border:1px solid var(--line);
@@ -265,12 +323,13 @@
 
     table{
       border-collapse:collapse;
-      min-width:850px;
+      min-width:900px;
       width:100%;
       font-size:13px;
     }
 
-    th,td{
+    th,
+    td{
       border:1px solid var(--line);
       padding:10px;
       vertical-align:top;
@@ -297,7 +356,9 @@
       background:#fff;
     }
 
-    .day-cell:hover{background:#eff6ff}
+    .day-cell:hover{
+      background:#eff6ff;
+    }
 
     .person-chip{
       display:inline-block;
@@ -350,7 +411,8 @@
       font-size:13px;
     }
 
-    .mini-table th,.mini-table td{
+    .mini-table th,
+    .mini-table td{
       min-width:auto;
       padding:8px;
     }
@@ -365,1301 +427,1667 @@
       font-size:12px;
       font-weight:800;
     }
-
-    .hour-box{
-      background:#f8fafc;
-      border:1px solid var(--line);
-      border-radius:14px;
-      padding:12px;
-      line-height:1.8;
-      font-size:14px;
-    }
   </style>
 </head>
 
 <body>
-<div class="app">
-  <div class="title">工程出工管理平台</div>
-  <div class="subtitle" id="todayText"></div>
-  <div id="globalMsg" class="msg"></div>
+  <div class="app">
+    <div class="app-title">工程出工管理平台</div>
+    <div class="app-subtitle" id="todayText"></div>
 
-  <section id="loginPage" class="card">
-    <div class="section-title">管理員登入</div>
-    <div class="grid">
-      <div>
-        <label>帳號</label>
-        <input id="loginUsername" autocomplete="username" />
-      </div>
-      <div>
-        <label>密碼</label>
-        <input id="loginPassword" type="password" autocomplete="current-password" />
-      </div>
-      <button id="loginBtn" onclick="login()">登入</button>
-    </div>
-  </section>
+    <div id="globalMsg" class="msg"></div>
 
-  <section id="homePage" class="hide">
-    <div class="card">
-      <div class="topbar">
-        <div>
-          <b id="loginName"></b>
-          <div class="small" id="loginRole"></div>
-        </div>
-        <button class="btn-ghost" onclick="logout()">登出</button>
-      </div>
-
-      <div class="nav">
-        <button onclick="openPrePage()">① 每週預排填報</button>
-        <button onclick="openActualPage()">② 實際填報修正</button>
-        <button onclick="openDashboard()">③ 出工總覽</button>
-        <button onclick="openAdmin()">④ 後台管理</button>
-      </div>
-    </div>
-  </section>
-
-  <section id="prePage" class="hide">
-    <div class="card">
-      <div class="topbar">
-        <div class="section-title">每週預排填報</div>
-        <button class="btn-ghost" onclick="openPage('homePage')">返回</button>
-      </div>
-
-      <div class="msg info show">
-        預排儲存後，系統會自動同步一筆到「實際填報」。若沒有變更，財務與人資直接以實際填報資料為準。
-      </div>
-
+    <section id="loginPage" class="card">
+      <div class="section-title">管理員登入</div>
       <div class="grid">
         <div>
-          <label>出工日期</label>
-          <input id="preDate" type="date" onchange="validatePreForm()" />
+          <label>帳號</label>
+          <input id="loginUsername" autocomplete="username" />
         </div>
-
         <div>
-          <label>人員名稱</label>
-          <select id="preUser" onchange="validatePreForm()"></select>
+          <label>密碼</label>
+          <input id="loginPassword" type="password" autocomplete="current-password" />
         </div>
-
-        <button class="btn-secondary" onclick="showAdminPanelFromPre('memberPanel')">＋新增人員</button>
-
-        <div>
-          <label>案場</label>
-          <select id="preProject" onchange="validatePreForm()"></select>
-        </div>
-
-        <button class="btn-secondary" onclick="showAdminPanelFromPre('projectPanel')">＋新增案場</button>
-
-        <div>
-          <label>車輛</label>
-          <select id="preVehicle" onchange="toggleTempVehicle('pre'); validatePreForm()"></select>
-        </div>
-
-        <div id="preTempVehicleBox" class="hide">
-          <label>臨時車號</label>
-          <input id="preTempPlateNo" oninput="validatePreForm()" placeholder="例：ABC-1234" />
-        </div>
-
-        <div class="grid-2">
-          <div>
-            <label>開始時間</label>
-            <select id="preStart" onchange="updateHours('pre'); validatePreForm()"></select>
-          </div>
-          <div>
-            <label>結束時間</label>
-            <select id="preEnd" onchange="updateHours('pre'); validatePreForm()"></select>
-          </div>
-        </div>
-
-        <div class="hour-box">
-          原始時數：<b id="preGross">0.0</b> 小時<br>
-          午休扣除：<b id="preLunch">0.0</b> 小時<br>
-          預排工時：<b id="preNet">0.0</b> 小時
-        </div>
-
-        <div>
-          <label>工作類型</label>
-          <select id="preWorkType" onchange="validatePreForm()">
-            <option value="">請選擇</option>
-            <option>施工</option>
-            <option>查驗</option>
-            <option>測試</option>
-            <option>維修</option>
-            <option>現場協調</option>
-            <option>其他</option>
-          </select>
-        </div>
-
-        <div>
-          <label>工作內容</label>
-          <textarea id="preNote" oninput="validatePreForm()"></textarea>
-        </div>
-
-        <button id="savePreBtn" onclick="savePreSchedule()" disabled>儲存預排並同步實際填報</button>
+        <button id="loginBtn" onclick="login()">登入</button>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <section id="actualPage" class="hide">
-    <div class="card">
-      <div class="topbar">
-        <div class="section-title">實際填報修正</div>
-        <button class="btn-ghost" onclick="openPage('homePage')">返回</button>
-      </div>
-
-      <div class="grid">
-        <div>
-          <label>查詢日期</label>
-          <input id="actualSearchDate" type="date" />
-        </div>
-        <div>
-          <label>人員</label>
-          <select id="actualSearchUser"></select>
-        </div>
-        <div>
-          <label>案場</label>
-          <select id="actualSearchProject"></select>
-        </div>
-        <button onclick="loadActualRecords()">查詢實際填報資料</button>
-      </div>
-    </div>
-
-    <div id="actualListCard" class="card hide">
-      <div class="section-title">實際填報清單</div>
-      <div id="actualList"></div>
-    </div>
-
-    <div id="actualEditCard" class="card hide">
-      <div class="topbar">
-        <div class="section-title">編輯實際出工</div>
-        <button class="btn-ghost" onclick="closeActualEdit()">關閉</button>
-      </div>
-
-      <div class="grid">
-        <input id="editRecordId" type="hidden" />
-
-        <div>
-          <label>人員名稱</label>
-          <select id="editUser" onchange="validateEditForm()"></select>
-        </div>
-
-        <div>
-          <label>出工日期</label>
-          <input id="editDate" type="date" onchange="validateEditForm()" />
-        </div>
-
-        <div>
-          <label>案場</label>
-          <select id="editProject" onchange="validateEditForm()"></select>
-        </div>
-
-        <div>
-          <label>車輛</label>
-          <select id="editVehicle" onchange="toggleTempVehicle('edit'); validateEditForm()"></select>
-        </div>
-
-        <div id="editTempVehicleBox" class="hide">
-          <label>臨時車號</label>
-          <input id="editTempPlateNo" oninput="validateEditForm()" />
-        </div>
-
-        <div class="grid-2">
-          <div>
-            <label>開始時間</label>
-            <select id="editStart" onchange="updateHours('edit'); validateEditForm()"></select>
-          </div>
-          <div>
-            <label>結束時間</label>
-            <select id="editEnd" onchange="updateHours('edit'); validateEditForm()"></select>
-          </div>
-        </div>
-
-        <div class="hour-box">
-          原始時數：<b id="editGross">0.0</b> 小時<br>
-          午休扣除：<b id="editLunch">0.0</b> 小時<br>
-          實際工時：<b id="editNet">0.0</b> 小時
-        </div>
-
-        <div>
-          <label>工作類型</label>
-          <select id="editWorkType" onchange="validateEditForm()">
-            <option value="">請選擇</option>
-            <option>施工</option>
-            <option>查驗</option>
-            <option>測試</option>
-            <option>維修</option>
-            <option>現場協調</option>
-            <option>其他</option>
-          </select>
-        </div>
-
-        <div>
-          <label>工作內容</label>
-          <textarea id="editNote" oninput="validateEditForm()"></textarea>
-        </div>
-
-        <div>
-          <label>變更原因</label>
-          <textarea id="editReason" oninput="validateEditForm()"></textarea>
-        </div>
-
-        <button id="saveEditBtn" onclick="updateActualRecord()" disabled>儲存實際變更</button>
-      </div>
-    </div>
-  </section>
-
-  <section id="dashboardPage" class="hide">
-    <div class="card">
-      <div class="topbar">
-        <div class="section-title">出工總覽</div>
-        <button class="btn-ghost" onclick="openPage('homePage')">返回</button>
-      </div>
-
-      <div class="tabs">
-        <button id="dashBoardTab" class="active" onclick="showDashboardTab('board')">白板</button>
-        <button id="dashProjectTab" onclick="showDashboardTab('project')">案場統計</button>
-        <button id="dashPersonTab" onclick="showDashboardTab('person')">人員統計</button>
-      </div>
-
-      <div class="stat-row">
-        <div class="stat"><div class="cap">本週人次</div><div class="num" id="weekCount">0</div></div>
-        <div class="stat"><div class="cap">本週工時</div><div class="num" id="weekHours">0</div></div>
-        <div class="stat"><div class="cap">本月人次</div><div class="num" id="monthCount">0</div></div>
-        <div class="stat"><div class="cap">本月工時</div><div class="num" id="monthHours">0</div></div>
-        <div class="stat"><div class="cap">本年人次</div><div class="num" id="yearCount">0</div></div>
-        <div class="stat"><div class="cap">本年工時</div><div class="num" id="yearHours">0</div></div>
-      </div>
-    </div>
-
-    <div id="boardPanel">
+    <section id="homePage" class="hide">
       <div class="card">
-        <div class="tabs">
-          <button id="dashActualBtn" class="active" onclick="setDashSource('actual')">實際資料</button>
-          <button id="dashPreBtn" onclick="setDashSource('pre')">預排資料</button>
-          <button onclick="loadWeeklyOverview()">更新</button>
-        </div>
-
-        <div class="grid-2">
-          <button class="btn-secondary" onclick="changeWeek(-7)">上一週</button>
-          <button class="btn-secondary" onclick="changeWeek(7)">下一週</button>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="section-title" id="weekTitle">週排程表</div>
-        <div class="small">可左右滑動；點擊格子可查看人員、工時、車號與工作內容。</div>
-        <div class="week-wrap" id="weekTableWrap"></div>
-      </div>
-
-      <div id="detailCard" class="card hide">
         <div class="topbar">
-          <div class="section-title" id="detailTitle">明細</div>
-          <button class="btn-ghost" onclick="hideDetail()">關閉</button>
+          <div>
+            <b id="loginName"></b>
+            <div class="small" id="loginRole"></div>
+          </div>
+          <button class="btn-ghost" onclick="logout()">登出</button>
         </div>
-        <div id="detailContent"></div>
-      </div>
-    </div>
 
-    <div id="projectPanelDash" class="hide">
+        <div class="nav">
+          <button onclick="openPrePage()">① 每週預排填報</button>
+          <button onclick="openActualPage()">② 實際填報修正</button>
+          <button onclick="openDashboard()">③ 出工總覽</button>
+          <button onclick="openAdmin()">④ 後台管理</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="prePage" class="hide">
       <div class="card">
-        <div class="section-title">案場別出工統計</div>
-        <div class="tabs">
-          <button id="projectWeekBtn" class="active" onclick="setProjectSummaryMode('week')">本週</button>
-          <button id="projectMonthBtn" onclick="setProjectSummaryMode('month')">本月</button>
-          <button id="projectYearBtn" onclick="setProjectSummaryMode('year')">本年</button>
+        <div class="topbar">
+          <div class="section-title">每週預排填報</div>
+          <button class="btn-ghost" onclick="openPage('homePage')">返回</button>
         </div>
-        <div id="projectSummary"></div>
-      </div>
-    </div>
 
-    <div id="personPanelDash" class="hide">
+        <div class="msg info show">
+          預排儲存後會自動同步到「實際填報」。若沒有變更，財務與人資直接看實際填報資料。
+        </div>
+
+        <div class="grid">
+          <div>
+            <label>出工日期</label>
+            <input id="preDate" type="date" onchange="onPreIdentityChange()" />
+          </div>
+
+          <div>
+            <label>人員名稱</label>
+            <select id="preUser" onchange="onPreIdentityChange()"></select>
+          </div>
+
+          <button class="btn-secondary" onclick="showAdminPanelFromPre('memberPanel')">＋新增人員</button>
+
+          <div>
+            <label>案場</label>
+            <select id="preProject" onchange="validatePreForm()"></select>
+          </div>
+
+          <button class="btn-secondary" onclick="showAdminPanelFromPre('projectPanel')">＋新增案場</button>
+
+          <div>
+            <label>車輛</label>
+            <select id="preVehicle" onchange="toggleTempVehicle('pre'); validatePreForm()"></select>
+          </div>
+
+          <div id="preTempVehicleBox" class="hide">
+            <label>臨時車號</label>
+            <input id="preTempPlateNo" oninput="validatePreForm()" placeholder="例：ABC-1234" />
+          </div>
+
+          <div class="grid-2">
+            <div>
+              <label>開始時間</label>
+              <select id="preStart" onchange="updateHours('pre'); validatePreForm()"></select>
+            </div>
+            <div>
+              <label>結束時間</label>
+              <select id="preEnd" onchange="updateHours('pre'); validatePreForm()"></select>
+            </div>
+          </div>
+
+          <div class="hour-box">
+            原始時數：<b id="preGross">0.0</b> 小時<br>
+            午休扣除：<b id="preLunch">0.0</b> 小時<br>
+            預排工時：<b id="preNet">0.0</b> 小時
+          </div>
+
+          <div id="preTodayRecordsBox" class="today-records">
+            請先選擇日期與人員，系統會顯示該人員當日已填時段。
+          </div>
+
+          <div>
+            <label>工作類型</label>
+            <select id="preWorkType" onchange="validatePreForm()">
+              <option value="">請選擇</option>
+              <option>施工</option>
+              <option>查驗</option>
+              <option>測試</option>
+              <option>維修</option>
+              <option>現場協調</option>
+              <option>其他</option>
+            </select>
+          </div>
+
+          <div>
+            <label>工作內容</label>
+            <textarea id="preNote" oninput="validatePreForm()"></textarea>
+          </div>
+
+          <button id="savePreBtn" onclick="savePreSchedule()" disabled>儲存預排並同步實際填報</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="actualPage" class="hide">
       <div class="card">
-        <div class="section-title">人員出工統計</div>
-        <div class="tabs">
-          <button id="personWeekBtn" class="active" onclick="setPersonSummaryMode('week')">本週</button>
-          <button id="personMonthBtn" onclick="setPersonSummaryMode('month')">本月</button>
-          <button id="personYearBtn" onclick="setPersonSummaryMode('year')">本年</button>
+        <div class="topbar">
+          <div class="section-title">實際填報修正</div>
+          <button class="btn-ghost" onclick="openPage('homePage')">返回</button>
         </div>
-        <div id="personSummary"></div>
+
+        <div class="grid">
+          <div>
+            <label>查詢日期</label>
+            <input id="actualSearchDate" type="date" />
+          </div>
+          <div>
+            <label>人員</label>
+            <select id="actualSearchUser"></select>
+          </div>
+          <div>
+            <label>案場</label>
+            <select id="actualSearchProject"></select>
+          </div>
+          <button onclick="loadActualRecords()">查詢實際填報資料</button>
+        </div>
       </div>
-    </div>
-  </section>
 
-  <section id="adminPage" class="hide">
-    <div class="card">
-      <div class="topbar">
-        <div class="section-title">後台管理</div>
-        <button class="btn-ghost" onclick="openPage('homePage')">返回</button>
+      <div id="actualListCard" class="card hide">
+        <div class="section-title">實際填報清單</div>
+        <div id="actualList"></div>
       </div>
 
-      <div class="nav">
-        <button onclick="showAdminPanel('memberPanel')">新增人員</button>
-        <button onclick="showAdminPanel('projectPanel')">新增案場</button>
-        <button onclick="showAdminPanel('vehiclePanel')">新增車輛</button>
-        <button onclick="showAdminPanel('adminUserPanel')">新增管理帳號</button>
+      <div id="actualEditCard" class="card hide">
+        <div class="topbar">
+          <div class="section-title">編輯實際出工</div>
+          <button class="btn-ghost" onclick="closeActualEdit()">關閉</button>
+        </div>
+
+        <div class="grid">
+          <input id="editRecordId" type="hidden" />
+
+          <div>
+            <label>人員名稱</label>
+            <select id="editUser" onchange="validateEditForm()"></select>
+          </div>
+
+          <div>
+            <label>出工日期</label>
+            <input id="editDate" type="date" onchange="validateEditForm()" />
+          </div>
+
+          <div>
+            <label>案場</label>
+            <select id="editProject" onchange="validateEditForm()"></select>
+          </div>
+
+          <div>
+            <label>車輛</label>
+            <select id="editVehicle" onchange="toggleTempVehicle('edit'); validateEditForm()"></select>
+          </div>
+
+          <div id="editTempVehicleBox" class="hide">
+            <label>臨時車號</label>
+            <input id="editTempPlateNo" oninput="validateEditForm()" />
+          </div>
+
+          <div class="grid-2">
+            <div>
+              <label>開始時間</label>
+              <select id="editStart" onchange="updateHours('edit'); validateEditForm()"></select>
+            </div>
+            <div>
+              <label>結束時間</label>
+              <select id="editEnd" onchange="updateHours('edit'); validateEditForm()"></select>
+            </div>
+          </div>
+
+          <div class="hour-box">
+            原始時數：<b id="editGross">0.0</b> 小時<br>
+            午休扣除：<b id="editLunch">0.0</b> 小時<br>
+            實際工時：<b id="editNet">0.0</b> 小時
+          </div>
+
+          <div>
+            <label>工作類型</label>
+            <select id="editWorkType" onchange="validateEditForm()">
+              <option value="">請選擇</option>
+              <option>施工</option>
+              <option>查驗</option>
+              <option>測試</option>
+              <option>維修</option>
+              <option>現場協調</option>
+              <option>其他</option>
+            </select>
+          </div>
+
+          <div>
+            <label>工作內容</label>
+            <textarea id="editNote" oninput="validateEditForm()"></textarea>
+          </div>
+
+          <div>
+            <label>變更原因</label>
+            <textarea id="editReason" oninput="validateEditForm()"></textarea>
+          </div>
+
+          <button id="saveEditBtn" onclick="updateActualRecord()" disabled>儲存實際變更</button>
+        </div>
       </div>
-    </div>
+    </section>
 
-    <div id="memberPanel" class="card hide admin-panel">
-      <div class="section-title">新增人員</div>
-      <div class="grid">
-        <input id="newMemberName" placeholder="姓名" />
-        <input id="newMemberDept" placeholder="部門，例如 工程部" />
-        <button onclick="adminAddMember()">新增人員</button>
+    <section id="dashboardPage" class="hide">
+      <div class="card">
+        <div class="topbar">
+          <div class="section-title">出工總覽</div>
+          <button class="btn-ghost" onclick="openPage('homePage')">返回</button>
+        </div>
+
+        <div class="tabs">
+          <button id="dashBoardTab" class="active" onclick="showDashboardTab('board')">白板</button>
+          <button id="dashProjectTab" onclick="showDashboardTab('project')">案場統計</button>
+          <button id="dashPersonTab" onclick="showDashboardTab('person')">人員統計</button>
+        </div>
+
+        <div class="stat-row">
+          <div class="stat"><div class="cap">本週人次</div><div class="num" id="weekCount">0</div></div>
+          <div class="stat"><div class="cap">本週工時</div><div class="num" id="weekHours">0</div></div>
+          <div class="stat"><div class="cap">本月人次</div><div class="num" id="monthCount">0</div></div>
+          <div class="stat"><div class="cap">本月工時</div><div class="num" id="monthHours">0</div></div>
+          <div class="stat"><div class="cap">本年人次</div><div class="num" id="yearCount">0</div></div>
+          <div class="stat"><div class="cap">本年工時</div><div class="num" id="yearHours">0</div></div>
+        </div>
       </div>
-    </div>
 
-    <div id="projectPanel" class="card hide admin-panel">
-      <div class="section-title">新增案場</div>
-      <div class="grid">
-        <input id="newProjectShort" placeholder="案場簡稱" />
-        <textarea id="newProjectFull" placeholder="完整案名"></textarea>
-        <input id="newProjectLocation" placeholder="地點" />
-        <button onclick="adminAddProject()">新增案場</button>
+      <div id="boardPanel">
+        <div class="card">
+          <div class="tabs">
+            <button id="dashActualBtn" class="active" onclick="setDashSource('actual')">實際資料</button>
+            <button id="dashPreBtn" onclick="setDashSource('pre')">預排資料</button>
+            <button onclick="loadWeeklyOverview()">更新</button>
+          </div>
+
+          <div class="grid-2">
+            <button class="btn-secondary" onclick="changeWeek(-7)">上一週</button>
+            <button class="btn-secondary" onclick="changeWeek(7)">下一週</button>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="section-title" id="weekTitle">週排程表</div>
+          <div class="small">可左右滑動；點擊格子可查看人員、工時、車號與工作內容。</div>
+          <div class="week-wrap" id="weekTableWrap"></div>
+        </div>
+
+        <div id="detailCard" class="card hide">
+          <div class="topbar">
+            <div class="section-title" id="detailTitle">明細</div>
+            <button class="btn-ghost" onclick="hideDetail()">關閉</button>
+          </div>
+          <div id="detailContent"></div>
+        </div>
       </div>
-    </div>
 
-    <div id="vehiclePanel" class="card hide admin-panel">
-      <div class="section-title">新增車輛</div>
-      <div class="grid">
-        <input id="newPlateNo" placeholder="車號，例如 R001" />
-        <input id="newVehicleName" placeholder="車輛名稱，例如 公司車" />
-        <input id="newVehicleType" placeholder="車種，例如 小客車 / 工程車" />
-        <button onclick="adminAddVehicle()">新增車輛</button>
+      <div id="projectPanelDash" class="hide">
+        <div class="card">
+          <div class="section-title">案場別出工統計</div>
+          <div class="tabs">
+            <button id="projectWeekBtn" class="active" onclick="setProjectSummaryMode('week')">本週</button>
+            <button id="projectMonthBtn" onclick="setProjectSummaryMode('month')">本月</button>
+            <button id="projectYearBtn" onclick="setProjectSummaryMode('year')">本年</button>
+          </div>
+          <div class="grid-3" style="margin-bottom:12px;">
+            <button class="btn-secondary" onclick="exportProjectSummary('week')">匯出本週 Excel</button>
+            <button class="btn-secondary" onclick="exportProjectSummary('month')">匯出本月 Excel</button>
+            <button class="btn-secondary" onclick="exportProjectSummary('year')">匯出本年 Excel</button>
+          </div>
+          <div id="projectSummary"></div>
+        </div>
       </div>
-    </div>
 
-    <div id="adminUserPanel" class="card hide admin-panel">
-      <div class="section-title">新增管理帳號</div>
-      <div class="grid">
-        <input id="newAdminUsername" placeholder="帳號" />
-        <input id="newAdminPassword" placeholder="密碼" />
-        <input id="newAdminName" placeholder="姓名" />
-        <input id="newAdminDept" placeholder="部門" />
-        <button onclick="adminAddUser()">新增管理帳號</button>
+      <div id="personPanelDash" class="hide">
+        <div class="card">
+          <div class="section-title">人員出工統計</div>
+          <div class="tabs">
+            <button id="personWeekBtn" class="active" onclick="setPersonSummaryMode('week')">本週</button>
+            <button id="personMonthBtn" onclick="setPersonSummaryMode('month')">本月</button>
+            <button id="personYearBtn" onclick="setPersonSummaryMode('year')">本年</button>
+          </div>
+          <div class="grid-3" style="margin-bottom:12px;">
+            <button class="btn-secondary" onclick="exportPersonSummary('week')">匯出本週 Excel</button>
+            <button class="btn-secondary" onclick="exportPersonSummary('month')">匯出本月 Excel</button>
+            <button class="btn-secondary" onclick="exportPersonSummary('year')">匯出本年 Excel</button>
+          </div>
+          <div id="personSummary"></div>
+        </div>
       </div>
-    </div>
-  </section>
-</div>
+    </section>
 
-<script>
-  const API_URL = 'https://script.google.com/macros/s/AKfycbyaRnoq4kGWhs-Cl1xi6qe5F0RJ0EWBj6gbHwvKLJZs4ljO15lr6HEzJjKkq6ZUJmkNyQ/exec';
+    <section id="adminPage" class="hide">
+      <div class="card">
+        <div class="topbar">
+          <div class="section-title">後台管理</div>
+          <button class="btn-ghost" onclick="openPage('homePage')">返回</button>
+        </div>
 
-  const state = {
-    token: localStorage.getItem('dispatch_token') || '',
-    user: JSON.parse(localStorage.getItem('dispatch_user') || 'null'),
-    projects: [],
-    vehicles: [],
-    users: [],
-    dashSource: 'actual',
-    currentWeekStart: getMondayString(new Date()),
-    projectSummaryMode: 'week',
-    personSummaryMode: 'week'
-  };
+        <div class="nav">
+          <button onclick="showAdminPanel('memberPanel')">新增人員</button>
+          <button onclick="showAdminPanel('projectPanel')">新增案場</button>
+          <button onclick="showAdminPanel('vehiclePanel')">新增車輛</button>
+          <button onclick="showAdminPanel('adminUserPanel')">新增管理帳號</button>
+        </div>
+      </div>
 
-  document.addEventListener('DOMContentLoaded', init);
+      <div id="memberPanel" class="card hide admin-panel">
+        <div class="section-title">新增人員</div>
+        <div class="grid">
+          <input id="newMemberName" placeholder="姓名" />
+          <input id="newMemberDept" placeholder="部門，例如 工程部" />
+          <button onclick="adminAddMember()">新增人員</button>
+        </div>
+      </div>
 
-  function init(){
-    setTodayText();
-    fillTimeOptions();
-    setDefaultDates();
+      <div id="projectPanel" class="card hide admin-panel">
+        <div class="section-title">新增案場</div>
+        <div class="grid">
+          <input id="newProjectShort" placeholder="案場簡稱" />
+          <textarea id="newProjectFull" placeholder="完整案名"></textarea>
+          <input id="newProjectLocation" placeholder="地點" />
+          <button onclick="adminAddProject()">新增案場</button>
+        </div>
+      </div>
 
-    if(state.token && state.user){
-      showLoggedIn();
-      loadMasterData();
-    }else{
+      <div id="vehiclePanel" class="card hide admin-panel">
+        <div class="section-title">新增車輛</div>
+        <div class="grid">
+          <input id="newPlateNo" placeholder="車號，例如 R001" />
+          <input id="newVehicleName" placeholder="車輛名稱，例如 公司車" />
+          <input id="newVehicleType" placeholder="車種，例如 小客車 / 工程車" />
+          <button onclick="adminAddVehicle()">新增車輛</button>
+        </div>
+      </div>
+
+      <div id="adminUserPanel" class="card hide admin-panel">
+        <div class="section-title">新增管理帳號</div>
+        <div class="grid">
+          <input id="newAdminUsername" placeholder="帳號" />
+          <input id="newAdminPassword" placeholder="密碼" />
+          <input id="newAdminName" placeholder="姓名" />
+          <input id="newAdminDept" placeholder="部門" />
+          <button onclick="adminAddUser()">新增管理帳號</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycbyaRnoq4kGWhs-Cl1xi6qe5F0RJ0EWBj6gbHwvKLJZs4ljO15lr6HEzJjKkq6ZUJmkNyQ/exec';
+
+    const state = {
+      token: localStorage.getItem('dispatch_token') || '',
+      user: JSON.parse(localStorage.getItem('dispatch_user') || 'null'),
+      projects: [],
+      vehicles: [],
+      users: [],
+      dashSource: 'actual',
+      currentWeekStart: getMondayString(new Date()),
+      projectSummaryMode: 'week',
+      personSummaryMode: 'week'
+    };
+
+    document.addEventListener('DOMContentLoaded', init);
+
+    function init(){
+      setTodayText();
+      fillTimeOptions();
+      setDefaultDates();
+
+      if(state.token && state.user){
+        showLoggedIn();
+        loadMasterData();
+      }else{
+        openPage('loginPage');
+      }
+    }
+
+    function setTodayText(){
+      const d = new Date();
+      const days = ['日','一','二','三','四','五','六'];
+      document.getElementById('todayText').textContent =
+        `今日：${formatDate(d)}（週${days[d.getDay()]}）`;
+    }
+
+    function setDefaultDates(){
+      const today = formatDate(new Date());
+      const nextWeek = new Date();
+      nextWeek.setDate(nextWeek.getDate() + 7);
+
+      document.getElementById('preDate').value = formatDate(nextWeek);
+      document.getElementById('actualSearchDate').value = today;
+    }
+
+    function openPage(id){
+      ['loginPage','homePage','prePage','actualPage','dashboardPage','adminPage'].forEach(x=>{
+        document.getElementById(x).classList.add('hide');
+      });
+
+      document.getElementById(id).classList.remove('hide');
+      clearMsg();
+    }
+
+    function showLoggedIn(){
+      openPage('homePage');
+      document.getElementById('loginName').textContent = `登入人員：${state.user.display_name}`;
+      document.getElementById('loginRole').textContent = `角色：${state.user.role}`;
+    }
+
+    async function api(action, payload = {}){
+      if(!API_URL || API_URL.includes('請貼上')){
+        throw new Error('API_URL_NOT_SET');
+      }
+
+      const res = await fetch(API_URL, {
+        method:'POST',
+        mode:'cors',
+        headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action, ...payload })
+      });
+
+      const json = await res.json();
+
+      if(!json.ok){
+        throw new Error(json.error || 'API_ERROR');
+      }
+
+      return json.data;
+    }
+
+    function showMsg(type, text){
+      const box = document.getElementById('globalMsg');
+      box.className = `msg show ${type}`;
+      box.textContent = text;
+    }
+
+    function clearMsg(){
+      const box = document.getElementById('globalMsg');
+      box.className = 'msg';
+      box.textContent = '';
+    }
+
+    function setBusy(btnId, busy, text){
+      const btn = document.getElementById(btnId);
+      if(!btn) return;
+
+      if(busy){
+        btn.dataset.oldText = btn.textContent;
+        btn.textContent = text || '處理中...';
+        btn.disabled = true;
+      }else{
+        btn.textContent = btn.dataset.oldText || btn.textContent;
+      }
+    }
+
+    async function login(){
+      clearMsg();
+
+      const username = value('loginUsername');
+      const password = value('loginPassword');
+
+      if(!username || !password){
+        showMsg('err','請輸入帳號與密碼。');
+        return;
+      }
+
+      try{
+        setBusy('loginBtn', true, '登入中...');
+        const data = await api('login',{ username, password });
+
+        state.token = data.token;
+        state.user = data.user;
+
+        localStorage.setItem('dispatch_token', state.token);
+        localStorage.setItem('dispatch_user', JSON.stringify(state.user));
+
+        showLoggedIn();
+        await loadMasterData();
+      }catch(err){
+        showMsg('err', errorText(err.message));
+      }finally{
+        setBusy('loginBtn', false);
+        document.getElementById('loginBtn').disabled = false;
+      }
+    }
+
+    function logout(){
+      localStorage.removeItem('dispatch_token');
+      localStorage.removeItem('dispatch_user');
+      state.token = '';
+      state.user = null;
       openPage('loginPage');
     }
-  }
 
-  function setTodayText(){
-    const d = new Date();
-    const days = ['日','一','二','三','四','五','六'];
-    document.getElementById('todayText').textContent =
-      `今日：${formatDate(d)}（週${days[d.getDay()]}）`;
-  }
+    async function loadMasterData(){
+      try{
+        const data = await api('getMasterData',{ token:state.token });
 
-  function setDefaultDates(){
-    const today = formatDate(new Date());
-    const nextWeek = new Date();
-    nextWeek.setDate(nextWeek.getDate() + 7);
+        state.projects = data.projects || [];
+        state.vehicles = data.vehicles || [];
+        state.users = data.users || [];
 
-    document.getElementById('preDate').value = formatDate(nextWeek);
-    document.getElementById('actualSearchDate').value = today;
-  }
-
-  function openPage(id){
-    ['loginPage','homePage','prePage','actualPage','dashboardPage','adminPage'].forEach(x=>{
-      document.getElementById(x).classList.add('hide');
-    });
-    document.getElementById(id).classList.remove('hide');
-    clearMsg();
-  }
-
-  function showLoggedIn(){
-    openPage('homePage');
-    document.getElementById('loginName').textContent = `登入人員：${state.user.display_name}`;
-    document.getElementById('loginRole').textContent = `角色：${state.user.role}`;
-  }
-
-  async function api(action, payload = {}){
-    if(!API_URL || API_URL.includes('貼你的')){
-      throw new Error('API_URL_NOT_SET');
+        fillMasterSelects();
+      }catch(err){
+        showMsg('err', errorText(err.message));
+      }
     }
 
-    const res = await fetch(API_URL, {
-      method:'POST',
-      mode:'cors',
-      headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action, ...payload })
-    });
+    function fillMasterSelects(){
+      fillUserSelect('preUser', false);
+      fillUserSelect('actualSearchUser', true);
+      fillUserSelect('editUser', false);
 
-    const json = await res.json();
+      fillProjectSelect('preProject', false);
+      fillProjectSelect('actualSearchProject', true);
+      fillProjectSelect('editProject', false);
 
-    if(!json.ok){
-      throw new Error(json.error || 'API_ERROR');
+      fillVehicleSelect('preVehicle');
+      fillVehicleSelect('editVehicle');
+
+      updateHours('pre');
+      updateHours('edit');
+      validatePreForm();
+      validateEditForm();
+      showTodayRecords();
     }
 
-    return json.data;
-  }
-
-  function showMsg(type, text){
-    const box = document.getElementById('globalMsg');
-    box.className = `msg show ${type}`;
-    box.textContent = text;
-  }
-
-  function clearMsg(){
-    const box = document.getElementById('globalMsg');
-    box.className = 'msg';
-    box.textContent = '';
-  }
-
-  function setBusy(btnId, busy, text){
-    const btn = document.getElementById(btnId);
-    if(!btn) return;
-
-    if(busy){
-      btn.dataset.oldText = btn.textContent;
-      btn.textContent = text || '處理中...';
-      btn.disabled = true;
-    }else{
-      btn.textContent = btn.dataset.oldText || btn.textContent;
-    }
-  }
-
-  async function login(){
-    clearMsg();
-
-    const username = value('loginUsername');
-    const password = value('loginPassword');
-
-    if(!username || !password){
-      showMsg('err','請輸入帳號與密碼。');
-      return;
-    }
-
-    try{
-      setBusy('loginBtn', true, '登入中...');
-      const data = await api('login',{ username, password });
-
-      state.token = data.token;
-      state.user = data.user;
-
-      localStorage.setItem('dispatch_token', state.token);
-      localStorage.setItem('dispatch_user', JSON.stringify(state.user));
-
-      showLoggedIn();
-      await loadMasterData();
-    }catch(err){
-      showMsg('err', errorText(err.message));
-    }finally{
-      setBusy('loginBtn', false);
-      document.getElementById('loginBtn').disabled = false;
-    }
-  }
-
-  function logout(){
-    localStorage.removeItem('dispatch_token');
-    localStorage.removeItem('dispatch_user');
-    state.token = '';
-    state.user = null;
-    openPage('loginPage');
-  }
-
-  async function loadMasterData(){
-    try{
-      const data = await api('getMasterData',{ token:state.token });
-      state.projects = data.projects || [];
-      state.vehicles = data.vehicles || [];
-      state.users = data.users || [];
-      fillMasterSelects();
-    }catch(err){
-      showMsg('err', errorText(err.message));
-    }
-  }
-
-  function fillMasterSelects(){
-    fillUserSelect('preUser', false);
-    fillUserSelect('actualSearchUser', true);
-    fillUserSelect('editUser', false);
-
-    fillProjectSelect('preProject', false);
-    fillProjectSelect('actualSearchProject', true);
-    fillProjectSelect('editProject', false);
-
-    fillVehicleSelect('preVehicle');
-    fillVehicleSelect('editVehicle');
-
-    updateHours('pre');
-    updateHours('edit');
-    validatePreForm();
-    validateEditForm();
-  }
-
-  function fillUserSelect(id, allowAll){
-    const el = document.getElementById(id);
-    if(!el) return;
-
-    el.innerHTML = allowAll ? '<option value="">全部人員</option>' : '<option value="">請選擇人員</option>';
-
-    state.users
-      .filter(u => u.role !== 'Admin')
-      .forEach(u=>{
-        const opt = document.createElement('option');
-        opt.value = u.user_id;
-        opt.textContent = `${u.display_name}｜${u.department || ''}`;
-        el.appendChild(opt);
-      });
-  }
-
-  function fillProjectSelect(id, allowAll){
-    const el = document.getElementById(id);
-    if(!el) return;
-
-    el.innerHTML = allowAll ? '<option value="">全部案場</option>' : '<option value="">請選擇案場</option>';
-
-    state.projects.forEach(p=>{
-      const opt = document.createElement('option');
-      opt.value = p.project_id;
-      opt.textContent = `${p.project_id}｜${p.project_short_name}`;
-      el.appendChild(opt);
-    });
-  }
-
-  function fillVehicleSelect(id){
-    const el = document.getElementById(id);
-    if(!el) return;
-
-    el.innerHTML = '';
-    addOption(el,'','請選擇車輛');
-    addOption(el,'NO_CAR','不使用車輛');
-    addOption(el,'TEMP','其他車輛／臨時車號');
-
-    state.vehicles.forEach(v=>{
-      addOption(el, v.vehicle_id, `${v.plate_no}｜${v.vehicle_name}`);
-    });
-  }
-
-  function addOption(el,value,text){
-    const opt = document.createElement('option');
-    opt.value = value;
-    opt.textContent = text;
-    el.appendChild(opt);
-  }
-
-  function fillTimeOptions(){
-    const ids = ['preStart','preEnd','editStart','editEnd'];
-    const times = [];
-
-    for(let h=6; h<=22; h++){
-      times.push(`${pad(h)}:00`);
-      times.push(`${pad(h)}:30`);
-    }
-
-    ids.forEach(id=>{
+    function fillUserSelect(id, allowAll){
       const el = document.getElementById(id);
       if(!el) return;
 
-      el.innerHTML = '<option value="">請選擇</option>';
-      times.forEach(t=>addOption(el,t,t));
-    });
+      el.innerHTML = allowAll ? '<option value="">全部人員</option>' : '<option value="">請選擇人員</option>';
 
-    document.getElementById('preStart').value = '08:30';
-    document.getElementById('preEnd').value = '17:30';
-    document.getElementById('editStart').value = '08:30';
-    document.getElementById('editEnd').value = '17:30';
-  }
-
-  function toggleTempVehicle(type){
-    const vehicle = value(`${type}Vehicle`);
-    const box = document.getElementById(`${type}TempVehicleBox`);
-    if(!box) return;
-
-    box.classList.toggle('hide', vehicle !== 'TEMP');
-  }
-
-  function calcHours(start,end){
-    if(!start || !end) return { gross:0, lunch:0, net:0, valid:false };
-
-    const s = toMinutes(start);
-    const e = toMinutes(end);
-
-    if(e <= s) return { gross:0, lunch:0, net:0, valid:false };
-
-    const lunchStart = toMinutes('12:00');
-    const lunchEnd = toMinutes('13:00');
-    const gross = (e - s) / 60;
-    const lunch = Math.max(0, Math.min(e,lunchEnd) - Math.max(s,lunchStart)) / 60;
-    const net = gross - lunch;
-
-    return {
-      gross: round1(gross),
-      lunch: round1(lunch),
-      net: round1(net),
-      valid: true
-    };
-  }
-
-  function updateHours(type){
-    const h = calcHours(value(`${type}Start`), value(`${type}End`));
-    setText(`${type}Gross`, h.gross.toFixed(1));
-    setText(`${type}Lunch`, h.lunch.toFixed(1));
-    setText(`${type}Net`, h.net.toFixed(1));
-  }
-
-  function validatePreForm(){
-    const vehicle = value('preVehicle');
-    const h = calcHours(value('preStart'), value('preEnd'));
-
-    const ok =
-      value('preDate') &&
-      value('preUser') &&
-      value('preProject') &&
-      vehicle &&
-      (vehicle !== 'TEMP' || value('preTempPlateNo')) &&
-      value('preStart') &&
-      value('preEnd') &&
-      h.valid &&
-      value('preWorkType') &&
-      value('preNote');
-
-    document.getElementById('savePreBtn').disabled = !ok;
-    return !!ok;
-  }
-
-  function validateEditForm(){
-    const btn = document.getElementById('saveEditBtn');
-    if(!btn) return false;
-
-    const vehicle = value('editVehicle');
-    const h = calcHours(value('editStart'), value('editEnd'));
-
-    const ok =
-      value('editRecordId') &&
-      value('editUser') &&
-      value('editDate') &&
-      value('editProject') &&
-      vehicle &&
-      (vehicle !== 'TEMP' || value('editTempPlateNo')) &&
-      value('editStart') &&
-      value('editEnd') &&
-      h.valid &&
-      value('editWorkType') &&
-      value('editNote');
-
-    btn.disabled = !ok;
-    return !!ok;
-  }
-
-  function openPrePage(){
-    openPage('prePage');
-    updateHours('pre');
-    validatePreForm();
-  }
-
-  async function savePreSchedule(){
-    clearMsg();
-
-    if(!validatePreForm()){
-      showMsg('err','資料尚未填寫完整，請確認人員、日期、案場、車輛、時間、類型與內容。');
-      return;
+      state.users
+        .filter(u => u.role !== 'Admin')
+        .forEach(u=>{
+          const opt = document.createElement('option');
+          opt.value = u.user_id;
+          opt.textContent = `${u.display_name}｜${u.department || ''}`;
+          el.appendChild(opt);
+        });
     }
 
-    try{
-      setBusy('savePreBtn', true, '儲存中...');
-      await api('savePreSchedule',{
-        token: state.token,
-        user_id: value('preUser'),
-        work_date: value('preDate'),
-        project_id: value('preProject'),
-        vehicle_id: value('preVehicle'),
-        temp_plate_no: value('preTempPlateNo'),
-        start_time: value('preStart'),
-        end_time: value('preEnd'),
-        work_type: value('preWorkType'),
-        work_note: value('preNote')
+    function fillProjectSelect(id, allowAll){
+      const el = document.getElementById(id);
+      if(!el) return;
+
+      el.innerHTML = allowAll ? '<option value="">全部案場</option>' : '<option value="">請選擇案場</option>';
+
+      state.projects.forEach(p=>{
+        const opt = document.createElement('option');
+        opt.value = p.project_id;
+        opt.textContent = `${p.project_id}｜${p.project_short_name}`;
+        el.appendChild(opt);
+      });
+    }
+
+    function fillVehicleSelect(id){
+      const el = document.getElementById(id);
+      if(!el) return;
+
+      el.innerHTML = '';
+
+      addOption(el,'','請選擇車輛');
+      addOption(el,'NO_CAR','不使用車輛');
+      addOption(el,'TEMP','其他車輛／臨時車號');
+
+      state.vehicles.forEach(v=>{
+        addOption(el, v.vehicle_id, `${v.plate_no}｜${v.vehicle_name}`);
+      });
+    }
+
+    function addOption(el,value,text){
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = text;
+      el.appendChild(opt);
+    }
+
+    function fillTimeOptions(){
+      const ids = ['preStart','preEnd','editStart','editEnd'];
+      const times = [];
+
+      for(let h=6; h<=22; h++){
+        times.push(`${pad(h)}:00`);
+        times.push(`${pad(h)}:30`);
+      }
+
+      ids.forEach(id=>{
+        const el = document.getElementById(id);
+        if(!el) return;
+
+        el.innerHTML = '<option value="">請選擇</option>';
+        times.forEach(t=>addOption(el,t,t));
       });
 
-      showMsg('ok','預排已儲存，並已同步到實際填報。');
-      document.getElementById('preNote').value = '';
+      setValue('preStart','08:30');
+      setValue('preEnd','17:30');
+      setValue('editStart','08:30');
+      setValue('editEnd','17:30');
+    }
+
+    function toggleTempVehicle(type){
+      const vehicle = value(`${type}Vehicle`);
+      const box = document.getElementById(`${type}TempVehicleBox`);
+
+      if(!box) return;
+
+      box.classList.toggle('hide', vehicle !== 'TEMP');
+    }
+
+    function calcHours(start,end){
+      if(!start || !end){
+        return { gross:0, lunch:0, net:0, valid:false };
+      }
+
+      const s = toMinutes(start);
+      const e = toMinutes(end);
+
+      if(e <= s){
+        return { gross:0, lunch:0, net:0, valid:false };
+      }
+
+      const lunchStart = toMinutes('12:00');
+      const lunchEnd = toMinutes('13:00');
+      const gross = (e - s) / 60;
+      const lunch = Math.max(0, Math.min(e,lunchEnd) - Math.max(s,lunchStart)) / 60;
+      const net = gross - lunch;
+
+      return {
+        gross: round1(gross),
+        lunch: round1(lunch),
+        net: round1(net),
+        valid: true
+      };
+    }
+
+    function updateHours(type){
+      const h = calcHours(value(`${type}Start`), value(`${type}End`));
+
+      setText(`${type}Gross`, h.gross.toFixed(1));
+      setText(`${type}Lunch`, h.lunch.toFixed(1));
+      setText(`${type}Net`, h.net.toFixed(1));
+    }
+
+    function validatePreForm(){
+      const vehicle = value('preVehicle');
+      const h = calcHours(value('preStart'), value('preEnd'));
+
+      const ok =
+        value('preDate') &&
+        value('preUser') &&
+        value('preProject') &&
+        vehicle &&
+        (vehicle !== 'TEMP' || value('preTempPlateNo')) &&
+        value('preStart') &&
+        value('preEnd') &&
+        h.valid &&
+        value('preWorkType') &&
+        value('preNote');
+
+      document.getElementById('savePreBtn').disabled = !ok;
+      return !!ok;
+    }
+
+    function validateEditForm(){
+      const btn = document.getElementById('saveEditBtn');
+      if(!btn) return false;
+
+      const vehicle = value('editVehicle');
+      const h = calcHours(value('editStart'), value('editEnd'));
+
+      const ok =
+        value('editRecordId') &&
+        value('editUser') &&
+        value('editDate') &&
+        value('editProject') &&
+        vehicle &&
+        (vehicle !== 'TEMP' || value('editTempPlateNo')) &&
+        value('editStart') &&
+        value('editEnd') &&
+        h.valid &&
+        value('editWorkType') &&
+        value('editNote');
+
+      btn.disabled = !ok;
+      return !!ok;
+    }
+
+    function openPrePage(){
+      openPage('prePage');
+      updateHours('pre');
       validatePreForm();
-    }catch(err){
-      showMsg('err', errorText(err.message));
-    }finally{
-      setBusy('savePreBtn', false);
+      showTodayRecords();
+    }
+
+    async function onPreIdentityChange(){
       validatePreForm();
+      await showTodayRecords();
     }
-  }
 
-  function openActualPage(){
-    openPage('actualPage');
-    loadActualRecords();
-  }
+    async function loadTodayRecords(userId, workDate){
+      if(!userId || !workDate) return [];
 
-  async function loadActualRecords(){
-    clearMsg();
-
-    try{
-      const rows = await api('getActualRecords',{
+      return await api('getActualRecords',{
         token: state.token,
-        work_date: value('actualSearchDate'),
-        user_id: value('actualSearchUser'),
-        project_id: value('actualSearchProject')
+        user_id: userId,
+        work_date: workDate
       });
-
-      renderActualList(rows);
-    }catch(err){
-      showMsg('err', errorText(err.message));
-    }
-  }
-
-  function renderActualList(rows){
-    document.getElementById('actualListCard').classList.remove('hide');
-
-    const box = document.getElementById('actualList');
-
-    if(!rows.length){
-      box.innerHTML = '<div class="small">目前查無實際填報資料。</div>';
-      return;
     }
 
-    box.innerHTML = rows.map(r=>`
-      <div class="record">
-        <b>${escapeHtml(r.work_date)}｜${escapeHtml(r.project_id)} ${escapeHtml(r.project_short_name)}</b>
-        <div>${escapeHtml(r.display_name)}｜${escapeHtml(r.start_time)}-${escapeHtml(r.end_time)}｜${escapeHtml(r.work_hours)} 小時</div>
-        <div>車輛：${escapeHtml(r.plate_no || '')}</div>
-        <div>工作：${escapeHtml(r.work_type || '')}</div>
-        <div class="small">來源：${escapeHtml(r.source_type || '')}</div>
-        <button class="btn-secondary" style="margin-top:10px" onclick='openActualEdit(${JSON.stringify(r)})'>編輯實際</button>
-      </div>
-    `).join('');
-  }
+    async function showTodayRecords(){
+      const userId = value('preUser');
+      const workDate = value('preDate');
+      const box = document.getElementById('preTodayRecordsBox');
 
-  function openActualEdit(r){
-    document.getElementById('actualEditCard').classList.remove('hide');
+      if(!box) return;
 
-    setValue('editRecordId', r.record_id);
-    setValue('editUser', r.user_id);
-    setValue('editDate', dateKey(r.work_date));
-    setValue('editProject', r.project_id);
-    setValue('editVehicle', r.vehicle_id);
-    setValue('editStart', r.start_time);
-    setValue('editEnd', r.end_time);
-    setValue('editWorkType', r.work_type);
-    setValue('editNote', r.work_note);
-    setValue('editReason', r.change_reason || '');
+      if(!userId || !workDate){
+        box.innerHTML = '請先選擇日期與人員，系統會顯示該人員當日已填時段。';
+        return;
+      }
 
-    if(r.vehicle_id === 'TEMP'){
-      setValue('editTempPlateNo', r.plate_no);
-    }else{
-      setValue('editTempPlateNo', '');
+      try{
+        const rows = await loadTodayRecords(userId, workDate);
+
+        if(!rows.length){
+          box.innerHTML = '今日尚無出工紀錄。';
+          return;
+        }
+
+        box.innerHTML = '<b>今日已填出工：</b><br>' + rows.map(r=>{
+          return `${escapeHtml(r.start_time)}-${escapeHtml(r.end_time)}｜${escapeHtml(r.project_id)} ${escapeHtml(r.project_short_name)}｜${escapeHtml(r.plate_no || '')}`;
+        }).join('<br>');
+      }catch(err){
+        box.innerHTML = `讀取今日紀錄失敗：${escapeHtml(errorText(err.message))}`;
+      }
     }
 
-    toggleTempVehicle('edit');
-    updateHours('edit');
-    validateEditForm();
+    function isTimeOverlap(newStart,newEnd,oldStart,oldEnd){
+      const ns = toMinutes(newStart);
+      const ne = toMinutes(newEnd);
+      const os = toMinutes(oldStart);
+      const oe = toMinutes(oldEnd);
 
-    document.getElementById('actualEditCard').scrollIntoView({behavior:'smooth'});
-  }
-
-  function closeActualEdit(){
-    document.getElementById('actualEditCard').classList.add('hide');
-  }
-
-  async function updateActualRecord(){
-    clearMsg();
-
-    if(!validateEditForm()){
-      showMsg('err','實際填報資料尚未完整。');
-      return;
+      return ns < oe && ne > os;
     }
 
-    try{
-      setBusy('saveEditBtn', true, '儲存中...');
-      await api('updateActualRecord',{
-        token: state.token,
-        record_id: value('editRecordId'),
-        user_id: value('editUser'),
-        work_date: value('editDate'),
-        project_id: value('editProject'),
-        vehicle_id: value('editVehicle'),
-        temp_plate_no: value('editTempPlateNo'),
-        start_time: value('editStart'),
-        end_time: value('editEnd'),
-        work_type: value('editWorkType'),
-        work_note: value('editNote'),
-        change_reason: value('editReason')
-      });
+    async function checkTimeConflict(){
+      const userId = value('preUser');
+      const workDate = value('preDate');
+      const start = value('preStart');
+      const end = value('preEnd');
 
-      showMsg('ok','實際填報已更新。');
-      closeActualEdit();
-      await loadActualRecords();
-    }catch(err){
-      showMsg('err', errorText(err.message));
-    }finally{
-      setBusy('saveEditBtn', false);
-      validateEditForm();
+      if(!userId || !workDate || !start || !end) return true;
+
+      const rows = await loadTodayRecords(userId, workDate);
+
+      const conflicts = rows.filter(r =>
+        isTimeOverlap(start, end, r.start_time, r.end_time)
+      );
+
+      if(conflicts.length){
+        const list = conflicts.map(r =>
+          `${r.start_time}-${r.end_time}（${r.project_id} ${r.project_short_name}）`
+        ).join('\n');
+
+        showMsg('err',
+`⚠️ 時間衝突
+
+你輸入：
+${start}-${end}
+
+已存在：
+${list}`);
+
+        return false;
+      }
+
+      return true;
     }
-  }
 
-  async function openDashboard(){
-    openPage('dashboardPage');
-    await Promise.all([
-      loadStats(),
-      loadWeeklyOverview(),
-      loadProjectSummary(),
-      loadPersonSummary()
-    ]);
-  }
+    async function savePreSchedule(){
+      clearMsg();
 
-  function showDashboardTab(tab){
-    document.getElementById('boardPanel').classList.toggle('hide', tab !== 'board');
-    document.getElementById('projectPanelDash').classList.toggle('hide', tab !== 'project');
-    document.getElementById('personPanelDash').classList.toggle('hide', tab !== 'person');
+      if(!validatePreForm()){
+        showMsg('err','資料尚未填寫完整，請確認人員、日期、案場、車輛、時間、類型與內容。');
+        return;
+      }
 
-    document.getElementById('dashBoardTab').classList.toggle('active', tab === 'board');
-    document.getElementById('dashProjectTab').classList.toggle('active', tab === 'project');
-    document.getElementById('dashPersonTab').classList.toggle('active', tab === 'person');
-  }
+      try{
+        const noConflict = await checkTimeConflict();
+        if(!noConflict) return;
 
-  async function loadStats(){
-    try{
-      const data = await api('getStats',{
-        token: state.token,
-        base_date: formatDate(new Date())
-      });
+        setBusy('savePreBtn', true, '儲存中...');
 
-      setText('weekCount', data.weekly.count);
-      setText('weekHours', data.weekly.hours);
-      setText('monthCount', data.monthly.count);
-      setText('monthHours', data.monthly.hours);
-      setText('yearCount', data.yearly.count);
-      setText('yearHours', data.yearly.hours);
-    }catch(err){
-      showMsg('err', errorText(err.message));
-    }
-  }
-
-  function setDashSource(source){
-    state.dashSource = source;
-    document.getElementById('dashActualBtn').classList.toggle('active', source === 'actual');
-    document.getElementById('dashPreBtn').classList.toggle('active', source === 'pre');
-    loadWeeklyOverview();
-  }
-
-  function changeWeek(days){
-    const d = parseDate(state.currentWeekStart);
-    d.setDate(d.getDate() + days);
-    state.currentWeekStart = formatDate(d);
-    loadWeeklyOverview();
-  }
-
-  async function loadWeeklyOverview(){
-    try{
-      const data = await api('getWeeklyOverview',{
-        token: state.token,
-        week_start: state.currentWeekStart,
-        source: state.dashSource
-      });
-
-      renderWeekTable(data);
-    }catch(err){
-      showMsg('err', errorText(err.message));
-    }
-  }
-
-  function renderWeekTable(data){
-    setText('weekTitle', `週排程表｜${data.week_start} ～ ${data.week_end}`);
-
-    const days = ['週一','週二','週三','週四','週五','週六','週日'];
-
-    let html = '<table><thead><tr>';
-    html += '<th class="project-cell">案場</th>';
-
-    data.dates.forEach((date,i)=>{
-      html += `<th>${days[i]}<br>${date.slice(5)}</th>`;
-    });
-
-    html += '</tr></thead><tbody>';
-
-    if(!data.projects.length){
-      html += '<tr><td colspan="8">目前此週尚無資料。</td></tr>';
-    }else{
-      data.projects.forEach(p=>{
-        html += '<tr>';
-        html += `<td class="project-cell">${escapeHtml(p.project_id)}<br><span class="small">${escapeHtml(p.project_short_name)}</span></td>`;
-
-        data.dates.forEach(date=>{
-          const cell = p.days[date];
-          const chips = cell.records.map(r=>`<span class="person-chip">${escapeHtml(r.display_name)}</span>`).join('');
-
-          html += `
-            <td class="day-cell" onclick='showDetail(${JSON.stringify(date)},${JSON.stringify(p.project_id)})'>
-              ${chips || '<span class="small">—</span>'}
-              ${cell.count ? `<div class="small">${cell.count}人次｜${cell.hours}hr</div>` : ''}
-            </td>
-          `;
+        await api('savePreSchedule',{
+          token: state.token,
+          user_id: value('preUser'),
+          work_date: value('preDate'),
+          project_id: value('preProject'),
+          vehicle_id: value('preVehicle'),
+          temp_plate_no: value('preTempPlateNo'),
+          start_time: value('preStart'),
+          end_time: value('preEnd'),
+          work_type: value('preWorkType'),
+          work_note: value('preNote')
         });
 
-        html += '</tr>';
-      });
+        showMsg('ok','預排已儲存，並已同步到實際填報。');
+        setValue('preNote','');
+
+        await showTodayRecords();
+        validatePreForm();
+      }catch(err){
+        showMsg('err', errorText(err.message));
+      }finally{
+        setBusy('savePreBtn', false);
+        validatePreForm();
+      }
     }
 
-    html += '</tbody></table>';
-
-    document.getElementById('weekTableWrap').innerHTML = html;
-    window.__weekData = data;
-  }
-
-  function showDetail(date, projectId){
-    const data = window.__weekData;
-    if(!data) return;
-
-    const project = data.projects.find(p=>p.project_id === projectId);
-    if(!project) return;
-
-    const records = project.days[date].records || [];
-
-    document.getElementById('detailCard').classList.remove('hide');
-    setText('detailTitle', `${date}｜${project.project_id} ${project.project_short_name}`);
-
-    const box = document.getElementById('detailContent');
-
-    if(!records.length){
-      box.innerHTML = '<div class="small">此格目前無資料。</div>';
-      return;
+    function openActualPage(){
+      openPage('actualPage');
+      loadActualRecords();
     }
 
-    box.innerHTML = records.map(r=>`
-      <div class="record">
-        <b>${escapeHtml(r.display_name)}</b>
-        <div>${escapeHtml(r.start_time)} - ${escapeHtml(r.end_time)}｜${escapeHtml(r.work_hours)} 小時｜${escapeHtml(r.work_type)}</div>
-        <div>車號：${escapeHtml(r.plate_no || '')}</div>
-        <div class="small">${escapeHtml(r.work_note || '')}</div>
-      </div>
-    `).join('');
-  }
+    async function loadActualRecords(){
+      clearMsg();
 
-  function hideDetail(){
-    document.getElementById('detailCard').classList.add('hide');
-  }
+      try{
+        const rows = await api('getActualRecords',{
+          token: state.token,
+          work_date: value('actualSearchDate'),
+          user_id: value('actualSearchUser'),
+          project_id: value('actualSearchProject')
+        });
 
-  function setProjectSummaryMode(mode){
-    state.projectSummaryMode = mode;
-
-    document.getElementById('projectWeekBtn').classList.toggle('active', mode === 'week');
-    document.getElementById('projectMonthBtn').classList.toggle('active', mode === 'month');
-    document.getElementById('projectYearBtn').classList.toggle('active', mode === 'year');
-
-    loadProjectSummary();
-  }
-
-  async function loadProjectSummary(){
-    try{
-      const data = await api('getProjectSummary',{
-        token: state.token,
-        mode: state.projectSummaryMode,
-        base_date: formatDate(new Date())
-      });
-
-      renderProjectSummary(data);
-    }catch(err){
-      showMsg('err', errorText(err.message));
-    }
-  }
-
-  function renderProjectSummary(data){
-    const el = document.getElementById('projectSummary');
-
-    if(!data.projects.length){
-      el.innerHTML = '<div class="small">尚無資料。</div>';
-      return;
+        renderActualList(rows);
+      }catch(err){
+        showMsg('err', errorText(err.message));
+      }
     }
 
-    el.innerHTML = data.projects.map(p=>`
-      <div class="summary-block">
-        <div class="summary-title">${escapeHtml(p.project_id)}｜${escapeHtml(p.project_short_name)}</div>
-        <div class="summary-meta">
-          期間：${escapeHtml(data.start_date)} ～ ${escapeHtml(data.end_date)}<br>
-          出工人次：${p.count}｜出工人數：${p.people_count}｜總工時：${p.hours}
+    function renderActualList(rows){
+      document.getElementById('actualListCard').classList.remove('hide');
+
+      const box = document.getElementById('actualList');
+
+      if(!rows.length){
+        box.innerHTML = '<div class="small">目前查無實際填報資料。</div>';
+        return;
+      }
+
+      box.innerHTML = rows.map(r=>`
+        <div class="record">
+          <b>${escapeHtml(r.work_date)}｜${escapeHtml(r.project_id)} ${escapeHtml(r.project_short_name)}</b>
+          <div>${escapeHtml(r.display_name)}｜${escapeHtml(r.start_time)}-${escapeHtml(r.end_time)}｜${escapeHtml(r.work_hours)} 小時</div>
+          <div>車輛：${escapeHtml(r.plate_no || '')}</div>
+          <div>工作：${escapeHtml(r.work_type || '')}</div>
+          <div class="small">來源：${escapeHtml(r.source_type || '')}</div>
+          <button class="btn-secondary" style="margin-top:10px" onclick='openActualEdit(${JSON.stringify(r)})'>編輯實際</button>
         </div>
-        <table class="mini-table">
-          <thead><tr><th>人員</th><th>人次</th><th>工時</th><th>日期</th></tr></thead>
-          <tbody>
-            ${p.users.map(u=>`
-              <tr>
-                <td>${escapeHtml(u.display_name)}</td>
-                <td>${u.count}</td>
-                <td>${u.hours}</td>
-                <td>${u.dates.map(d=>d.slice(5)).join(', ')}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    `).join('');
-  }
+      `).join('');
+    }
 
-  function setPersonSummaryMode(mode){
-    state.personSummaryMode = mode;
+    function openActualEdit(r){
+      document.getElementById('actualEditCard').classList.remove('hide');
 
-    document.getElementById('personWeekBtn').classList.toggle('active', mode === 'week');
-    document.getElementById('personMonthBtn').classList.toggle('active', mode === 'month');
-    document.getElementById('personYearBtn').classList.toggle('active', mode === 'year');
+      setValue('editRecordId', r.record_id);
+      setValue('editUser', r.user_id);
+      setValue('editDate', dateKey(r.work_date));
+      setValue('editProject', r.project_id);
+      setValue('editVehicle', r.vehicle_id);
+      setValue('editStart', r.start_time);
+      setValue('editEnd', r.end_time);
+      setValue('editWorkType', r.work_type);
+      setValue('editNote', r.work_note);
+      setValue('editReason', r.change_reason || '');
 
-    loadPersonSummary();
-  }
+      if(r.vehicle_id === 'TEMP'){
+        setValue('editTempPlateNo', r.plate_no);
+      }else{
+        setValue('editTempPlateNo', '');
+      }
 
-  async function loadPersonSummary(){
-    try{
-      const data = await api('getPersonSummary',{
-        token: state.token,
-        mode: state.personSummaryMode,
-        base_date: formatDate(new Date())
+      toggleTempVehicle('edit');
+      updateHours('edit');
+      validateEditForm();
+
+      document.getElementById('actualEditCard').scrollIntoView({behavior:'smooth'});
+    }
+
+    function closeActualEdit(){
+      document.getElementById('actualEditCard').classList.add('hide');
+    }
+
+    async function updateActualRecord(){
+      clearMsg();
+
+      if(!validateEditForm()){
+        showMsg('err','實際填報資料尚未完整。');
+        return;
+      }
+
+      try{
+        setBusy('saveEditBtn', true, '儲存中...');
+
+        await api('updateActualRecord',{
+          token: state.token,
+          record_id: value('editRecordId'),
+          user_id: value('editUser'),
+          work_date: value('editDate'),
+          project_id: value('editProject'),
+          vehicle_id: value('editVehicle'),
+          temp_plate_no: value('editTempPlateNo'),
+          start_time: value('editStart'),
+          end_time: value('editEnd'),
+          work_type: value('editWorkType'),
+          work_note: value('editNote'),
+          change_reason: value('editReason')
+        });
+
+        showMsg('ok','實際填報已更新。');
+        closeActualEdit();
+        await loadActualRecords();
+      }catch(err){
+        showMsg('err', errorText(err.message));
+      }finally{
+        setBusy('saveEditBtn', false);
+        validateEditForm();
+      }
+    }
+
+    async function openDashboard(){
+      openPage('dashboardPage');
+
+      await Promise.all([
+        loadStats(),
+        loadWeeklyOverview(),
+        loadProjectSummary(),
+        loadPersonSummary()
+      ]);
+    }
+
+    function showDashboardTab(tab){
+      document.getElementById('boardPanel').classList.toggle('hide', tab !== 'board');
+      document.getElementById('projectPanelDash').classList.toggle('hide', tab !== 'project');
+      document.getElementById('personPanelDash').classList.toggle('hide', tab !== 'person');
+
+      document.getElementById('dashBoardTab').classList.toggle('active', tab === 'board');
+      document.getElementById('dashProjectTab').classList.toggle('active', tab === 'project');
+      document.getElementById('dashPersonTab').classList.toggle('active', tab === 'person');
+    }
+
+    async function loadStats(){
+      try{
+        const data = await api('getStats',{
+          token: state.token,
+          base_date: formatDate(new Date())
+        });
+
+        setText('weekCount', data.weekly.count);
+        setText('weekHours', data.weekly.hours);
+        setText('monthCount', data.monthly.count);
+        setText('monthHours', data.monthly.hours);
+        setText('yearCount', data.yearly.count);
+        setText('yearHours', data.yearly.hours);
+      }catch(err){
+        showMsg('err', errorText(err.message));
+      }
+    }
+
+    function setDashSource(source){
+      state.dashSource = source;
+
+      document.getElementById('dashActualBtn').classList.toggle('active', source === 'actual');
+      document.getElementById('dashPreBtn').classList.toggle('active', source === 'pre');
+
+      loadWeeklyOverview();
+    }
+
+    function changeWeek(days){
+      const d = parseDate(state.currentWeekStart);
+      d.setDate(d.getDate() + days);
+      state.currentWeekStart = formatDate(d);
+      loadWeeklyOverview();
+    }
+
+    async function loadWeeklyOverview(){
+      try{
+        const data = await api('getWeeklyOverview',{
+          token: state.token,
+          week_start: state.currentWeekStart,
+          source: state.dashSource
+        });
+
+        renderWeekTable(data);
+      }catch(err){
+        showMsg('err', errorText(err.message));
+      }
+    }
+
+    function renderWeekTable(data){
+      setText('weekTitle', `週排程表｜${data.week_start} ～ ${data.week_end}`);
+
+      const days = ['週一','週二','週三','週四','週五','週六','週日'];
+
+      let html = '<table><thead><tr>';
+      html += '<th class="project-cell">案場</th>';
+
+      data.dates.forEach((date,i)=>{
+        html += `<th>${days[i]}<br>${date.slice(5)}</th>`;
       });
 
-      renderPersonSummary(data);
-    }catch(err){
-      showMsg('err', errorText(err.message));
+      html += '</tr></thead><tbody>';
+
+      if(!data.projects.length){
+        html += '<tr><td colspan="8">目前此週尚無資料。</td></tr>';
+      }else{
+        data.projects.forEach(p=>{
+          html += '<tr>';
+          html += `<td class="project-cell">${escapeHtml(p.project_id)}<br><span class="small">${escapeHtml(p.project_short_name)}</span></td>`;
+
+          data.dates.forEach(date=>{
+            const cell = p.days[date];
+            const chips = cell.records.map(r=>`<span class="person-chip">${escapeHtml(r.display_name)}</span>`).join('');
+
+            html += `
+              <td class="day-cell" onclick='showDetail(${JSON.stringify(date)},${JSON.stringify(p.project_id)})'>
+                ${chips || '<span class="small">—</span>'}
+                ${cell.count ? `<div class="small">${cell.count}人次｜${cell.hours}hr</div>` : ''}
+              </td>
+            `;
+          });
+
+          html += '</tr>';
+        });
+      }
+
+      html += '</tbody></table>';
+
+      document.getElementById('weekTableWrap').innerHTML = html;
+      window.__weekData = data;
     }
-  }
 
-  function renderPersonSummary(data){
-    const el = document.getElementById('personSummary');
+    function showDetail(date, projectId){
+      const data = window.__weekData;
+      if(!data) return;
 
-    if(!data.people.length){
-      el.innerHTML = '<div class="small">尚無資料。</div>';
-      return;
-    }
+      const project = data.projects.find(p=>p.project_id === projectId);
+      if(!project) return;
 
-    el.innerHTML = data.people.map(p=>`
-      <div class="summary-block">
-        <div class="summary-title">${escapeHtml(p.display_name)}</div>
-        <div class="summary-meta">
-          期間：${escapeHtml(data.start_date)} ～ ${escapeHtml(data.end_date)}<br>
-          出工次數：${p.count}｜總工時：${p.hours}｜涉及案場：${p.project_count}
+      const records = project.days[date].records || [];
+
+      document.getElementById('detailCard').classList.remove('hide');
+      setText('detailTitle', `${date}｜${project.project_id} ${project.project_short_name}`);
+
+      const box = document.getElementById('detailContent');
+
+      if(!records.length){
+        box.innerHTML = '<div class="small">此格目前無資料。</div>';
+        return;
+      }
+
+      box.innerHTML = records.map(r=>`
+        <div class="record">
+          <b>${escapeHtml(r.display_name)}</b>
+          <div>${escapeHtml(r.start_time)} - ${escapeHtml(r.end_time)}｜${escapeHtml(r.work_hours)} 小時｜${escapeHtml(r.work_type)}</div>
+          <div>車號：${escapeHtml(r.plate_no || '')}</div>
+          <div class="small">${escapeHtml(r.work_note || '')}</div>
         </div>
-        <div>
-          ${p.projects.map(x=>`<span class="pill">${escapeHtml(x.project_id)} ${escapeHtml(x.project_short_name)}</span>`).join('')}
+      `).join('');
+    }
+
+    function hideDetail(){
+      document.getElementById('detailCard').classList.add('hide');
+    }
+
+    function setProjectSummaryMode(mode){
+      state.projectSummaryMode = mode;
+
+      document.getElementById('projectWeekBtn').classList.toggle('active', mode === 'week');
+      document.getElementById('projectMonthBtn').classList.toggle('active', mode === 'month');
+      document.getElementById('projectYearBtn').classList.toggle('active', mode === 'year');
+
+      loadProjectSummary();
+    }
+
+    async function loadProjectSummary(){
+      try{
+        const data = await api('getProjectSummary',{
+          token: state.token,
+          mode: state.projectSummaryMode,
+          base_date: formatDate(new Date())
+        });
+
+        renderProjectSummary(data);
+      }catch(err){
+        showMsg('err', errorText(err.message));
+      }
+    }
+
+    function renderProjectSummary(data){
+      const el = document.getElementById('projectSummary');
+
+      if(!data.projects.length){
+        el.innerHTML = '<div class="small">尚無資料。</div>';
+        return;
+      }
+
+      el.innerHTML = data.projects.map(p=>`
+        <div class="summary-block">
+          <div class="summary-title">${escapeHtml(p.project_id)}｜${escapeHtml(p.project_short_name)}</div>
+          <div class="summary-meta">
+            期間：${escapeHtml(data.start_date)} ～ ${escapeHtml(data.end_date)}<br>
+            出工人次：${p.count}｜出工人數：${p.people_count}｜總工時：${p.hours}
+          </div>
+          <table class="mini-table">
+            <thead><tr><th>人員</th><th>人次</th><th>工時</th><th>日期</th></tr></thead>
+            <tbody>
+              ${p.users.map(u=>`
+                <tr>
+                  <td>${escapeHtml(u.display_name)}</td>
+                  <td>${u.count}</td>
+                  <td>${u.hours}</td>
+                  <td>${u.dates.map(d=>d.slice(5)).join(', ')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
         </div>
-        <div class="divider"></div>
-        <table class="mini-table">
-          <thead><tr><th>日期</th><th>案場</th><th>車號</th><th>時間</th><th>工時</th></tr></thead>
-          <tbody>
-            ${p.records.map(r=>`
-              <tr>
-                <td>${escapeHtml(r.work_date.slice(5))}</td>
-                <td>${escapeHtml(r.project_id)} ${escapeHtml(r.project_short_name)}</td>
-                <td>${escapeHtml(r.plate_no || '')}</td>
-                <td>${escapeHtml(r.start_time)}-${escapeHtml(r.end_time)}</td>
-                <td>${r.work_hours}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    `).join('');
-  }
+      `).join('');
+    }
 
-  function openAdmin(){
-    openPage('adminPage');
-  }
+    function setPersonSummaryMode(mode){
+      state.personSummaryMode = mode;
 
-  function showAdminPanel(id){
-    document.querySelectorAll('.admin-panel').forEach(x=>x.classList.add('hide'));
-    document.getElementById(id).classList.remove('hide');
-  }
+      document.getElementById('personWeekBtn').classList.toggle('active', mode === 'week');
+      document.getElementById('personMonthBtn').classList.toggle('active', mode === 'month');
+      document.getElementById('personYearBtn').classList.toggle('active', mode === 'year');
 
-  function showAdminPanelFromPre(id){
-    openAdmin();
-    showAdminPanel(id);
-  }
+      loadPersonSummary();
+    }
 
-  async function adminAddMember(){
-    try{
-      await api('adminAddMember',{
-        token:state.token,
-        display_name:value('newMemberName'),
-        department:value('newMemberDept')
+    async function loadPersonSummary(){
+      try{
+        const data = await api('getPersonSummary',{
+          token: state.token,
+          mode: state.personSummaryMode,
+          base_date: formatDate(new Date())
+        });
+
+        renderPersonSummary(data);
+      }catch(err){
+        showMsg('err', errorText(err.message));
+      }
+    }
+
+    function renderPersonSummary(data){
+      const el = document.getElementById('personSummary');
+
+      if(!data.people.length){
+        el.innerHTML = '<div class="small">尚無資料。</div>';
+        return;
+      }
+
+      el.innerHTML = data.people.map(p=>`
+        <div class="summary-block">
+          <div class="summary-title">${escapeHtml(p.display_name)}</div>
+          <div class="summary-meta">
+            期間：${escapeHtml(data.start_date)} ～ ${escapeHtml(data.end_date)}<br>
+            出工次數：${p.count}｜總工時：${p.hours}｜涉及案場：${p.project_count}
+          </div>
+          <div>
+            ${p.projects.map(x=>`<span class="pill">${escapeHtml(x.project_id)} ${escapeHtml(x.project_short_name)}</span>`).join('')}
+          </div>
+          <div class="divider"></div>
+          <table class="mini-table">
+            <thead><tr><th>日期</th><th>案場</th><th>車號</th><th>時間</th><th>工時</th></tr></thead>
+            <tbody>
+              ${p.records.map(r=>`
+                <tr>
+                  <td>${escapeHtml(r.work_date.slice(5))}</td>
+                  <td>${escapeHtml(r.project_id)} ${escapeHtml(r.project_short_name)}</td>
+                  <td>${escapeHtml(r.plate_no || '')}</td>
+                  <td>${escapeHtml(r.start_time)}-${escapeHtml(r.end_time)}</td>
+                  <td>${r.work_hours}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `).join('');
+    }
+
+    async function exportProjectSummary(mode){
+      try{
+        showMsg('info','案場統計 Excel 產生中...');
+
+        const data = await api('getProjectSummary',{
+          token: state.token,
+          mode: mode,
+          base_date: formatDate(new Date())
+        });
+
+        const workbook = new ExcelJS.Workbook();
+        const sheet = workbook.addWorksheet('案場統計');
+
+        sheet.columns = [
+          { width: 16 },
+          { width: 28 },
+          { width: 14 },
+          { width: 14 },
+          { width: 14 },
+          { width: 18 },
+          { width: 18 },
+          { width: 28 }
+        ];
+
+        sheet.addRow(['工程出工管理平台']);
+        sheet.mergeCells('A1:H1');
+        styleTitleCell(sheet.getCell('A1'));
+
+        sheet.addRow(['案場別出工統計報表']);
+        sheet.mergeCells('A2:H2');
+        styleTitleCell(sheet.getCell('A2'));
+
+        sheet.addRow([`統計期間：${data.start_date} ～ ${data.end_date}`]);
+        sheet.mergeCells('A3:H3');
+
+        sheet.addRow([`報表類型：${modeText(mode)}`]);
+        sheet.mergeCells('A4:H4');
+
+        sheet.addRow([`匯出時間：${new Date().toLocaleString('zh-TW')}`]);
+        sheet.mergeCells('A5:H5');
+
+        sheet.addRow([]);
+
+        const header = sheet.addRow([
+          '案場編號',
+          '案場名稱',
+          '出工人次',
+          '出工人數',
+          '總工時',
+          '人員',
+          '個人工時',
+          '出工日期'
+        ]);
+        styleHeaderRow(header);
+
+        data.projects.forEach(project=>{
+          if(!project.users.length){
+            const row = sheet.addRow([
+              project.project_id,
+              project.project_short_name,
+              project.count,
+              project.people_count,
+              project.hours,
+              '',
+              '',
+              ''
+            ]);
+            styleDataRow(row);
+          }
+
+          project.users.forEach((user, index)=>{
+            const row = sheet.addRow([
+              index === 0 ? project.project_id : '',
+              index === 0 ? project.project_short_name : '',
+              index === 0 ? project.count : '',
+              index === 0 ? project.people_count : '',
+              index === 0 ? project.hours : '',
+              user.display_name,
+              user.hours,
+              user.dates.join(', ')
+            ]);
+            styleDataRow(row);
+          });
+
+          sheet.addRow([]);
+        });
+
+        const buffer = await workbook.xlsx.writeBuffer();
+
+        const fileName =
+          `案場別出工統計_${modeText(mode)}_${fileDateText(data.start_date)}-${fileDateText(data.end_date)}.xlsx`;
+
+        saveAs(new Blob([buffer]), fileName);
+
+        showMsg('ok','案場統計 Excel 已匯出。');
+      }catch(err){
+        showMsg('err', errorText(err.message));
+      }
+    }
+
+    async function exportPersonSummary(mode){
+      try{
+        showMsg('info','人員統計 Excel 產生中...');
+
+        const data = await api('getPersonSummary',{
+          token: state.token,
+          mode: mode,
+          base_date: formatDate(new Date())
+        });
+
+        const workbook = new ExcelJS.Workbook();
+        const sheet = workbook.addWorksheet('人員統計');
+
+        sheet.columns = [
+          { width: 14 },
+          { width: 14 },
+          { width: 14 },
+          { width: 20 },
+          { width: 18 },
+          { width: 28 },
+          { width: 18 },
+          { width: 20 },
+          { width: 14 },
+          { width: 30 }
+        ];
+
+        sheet.addRow(['工程出工管理平台']);
+        sheet.mergeCells('A1:J1');
+        styleTitleCell(sheet.getCell('A1'));
+
+        sheet.addRow(['人員出工統計報表']);
+        sheet.mergeCells('A2:J2');
+        styleTitleCell(sheet.getCell('A2'));
+
+        sheet.addRow([`統計期間：${data.start_date} ～ ${data.end_date}`]);
+        sheet.mergeCells('A3:J3');
+
+        sheet.addRow([`報表類型：${modeText(mode)}`]);
+        sheet.mergeCells('A4:J4');
+
+        sheet.addRow([`匯出時間：${new Date().toLocaleString('zh-TW')}`]);
+        sheet.mergeCells('A5:J5');
+
+        sheet.addRow([]);
+
+        const header = sheet.addRow([
+          '人員',
+          '出工次數',
+          '總工時',
+          '涉及案場數',
+          '日期',
+          '案場',
+          '車號',
+          '時間',
+          '工時',
+          '工作內容'
+        ]);
+        styleHeaderRow(header);
+
+        data.people.forEach(person=>{
+          if(!person.records.length){
+            const row = sheet.addRow([
+              person.display_name,
+              person.count,
+              person.hours,
+              person.project_count,
+              '',
+              '',
+              '',
+              '',
+              '',
+              ''
+            ]);
+            styleDataRow(row);
+          }
+
+          person.records.forEach((record, index)=>{
+            const row = sheet.addRow([
+              index === 0 ? person.display_name : '',
+              index === 0 ? person.count : '',
+              index === 0 ? person.hours : '',
+              index === 0 ? person.project_count : '',
+              record.work_date,
+              `${record.project_id} ${record.project_short_name}`,
+              record.plate_no,
+              `${record.start_time}-${record.end_time}`,
+              record.work_hours,
+              record.work_note || ''
+            ]);
+            styleDataRow(row);
+          });
+
+          sheet.addRow([]);
+        });
+
+        const buffer = await workbook.xlsx.writeBuffer();
+
+        const fileName =
+          `人員出工統計_${modeText(mode)}_${fileDateText(data.start_date)}-${fileDateText(data.end_date)}.xlsx`;
+
+        saveAs(new Blob([buffer]), fileName);
+
+        showMsg('ok','人員統計 Excel 已匯出。');
+      }catch(err){
+        showMsg('err', errorText(err.message));
+      }
+    }
+
+    function styleTitleCell(cell){
+      cell.font = { bold: true, size: 16 };
+      cell.alignment = { vertical: 'middle', horizontal: 'left' };
+    }
+
+    function styleHeaderRow(row){
+      row.eachCell(cell=>{
+        cell.font = { bold: true };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFEFF6FF' }
+        };
+        cell.border = borderAll();
       });
-
-      showMsg('ok','人員已新增。');
-      clearAdminInputs();
-      await loadMasterData();
-    }catch(err){
-      showMsg('err', errorText(err.message));
     }
-  }
 
-  async function adminAddProject(){
-    try{
-      await api('adminAddProject',{
-        token:state.token,
-        project_short_name:value('newProjectShort'),
-        project_full_name:value('newProjectFull'),
-        location:value('newProjectLocation')
+    function styleDataRow(row){
+      row.eachCell(cell=>{
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+        cell.border = borderAll();
       });
-
-      showMsg('ok','案場已新增。');
-      clearAdminInputs();
-      await loadMasterData();
-    }catch(err){
-      showMsg('err', errorText(err.message));
-    }
-  }
-
-  async function adminAddVehicle(){
-    try{
-      await api('adminAddVehicle',{
-        token:state.token,
-        plate_no:value('newPlateNo'),
-        vehicle_name:value('newVehicleName'),
-        vehicle_type:value('newVehicleType')
-      });
-
-      showMsg('ok','車輛已新增。');
-      clearAdminInputs();
-      await loadMasterData();
-    }catch(err){
-      showMsg('err', errorText(err.message));
-    }
-  }
-
-  async function adminAddUser(){
-    try{
-      await api('adminAddUser',{
-        token:state.token,
-        username:value('newAdminUsername'),
-        password:value('newAdminPassword'),
-        display_name:value('newAdminName'),
-        role:'Admin',
-        department:value('newAdminDept')
-      });
-
-      showMsg('ok','管理帳號已新增。');
-      clearAdminInputs();
-      await loadMasterData();
-    }catch(err){
-      showMsg('err', errorText(err.message));
-    }
-  }
-
-  function clearAdminInputs(){
-    [
-      'newMemberName','newMemberDept',
-      'newProjectShort','newProjectFull','newProjectLocation',
-      'newPlateNo','newVehicleName','newVehicleType',
-      'newAdminUsername','newAdminPassword','newAdminName','newAdminDept'
-    ].forEach(id=>setValue(id,''));
-  }
-
-  function value(id){
-    const el = document.getElementById(id);
-    return el ? String(el.value || '').trim() : '';
-  }
-
-  function setValue(id,v){
-    const el = document.getElementById(id);
-    if(el) el.value = v || '';
-  }
-
-  function setText(id,v){
-    const el = document.getElementById(id);
-    if(el) el.textContent = v;
-  }
-
-  function toMinutes(t){
-    const [h,m] = t.split(':').map(Number);
-    return h * 60 + m;
-  }
-
-  function round1(n){
-    return Math.round(n * 10) / 10;
-  }
-
-  function formatDate(d){
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-  }
-
-  function parseDate(s){
-    const [y,m,d] = s.split('-').map(Number);
-    return new Date(y,m-1,d);
-  }
-
-  function getMondayString(date){
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = day === 0 ? -6 : 1 - day;
-    d.setDate(d.getDate() + diff);
-    return formatDate(d);
-  }
-
-  function dateKey(s){
-    return String(s || '').replaceAll('/','-').slice(0,10);
-  }
-
-  function pad(n){
-    return String(n).padStart(2,'0');
-  }
-
-  function escapeHtml(str){
-    return String(str ?? '')
-      .replaceAll('&','&amp;')
-      .replaceAll('<','&lt;')
-      .replaceAll('>','&gt;')
-      .replaceAll('"','&quot;')
-      .replaceAll("'","&#039;");
-  }
-
-  function errorText(code){
-    const map = {
-      API_URL_NOT_SET:'尚未設定 Apps Script API 網址。',
-      MISSING_ACTION:'系統缺少 action。',
-      INVALID_ACTION:'系統功能不存在，請確認 Apps Script 是否已部署新版。',
-      INVALID_JSON:'資料格式錯誤。',
-      LOGIN_FAILED:'帳號或密碼錯誤，或帳號已停用。',
-      INVALID_TOKEN:'登入已失效，請重新登入。',
-      ADMIN_ONLY:'此功能限管理員使用。',
-      PROJECT_NOT_FOUND:'找不到案場，或案場已停用。',
-      VEHICLE_NOT_FOUND:'找不到車輛，或車輛已停用。',
-      USER_NOT_FOUND:'找不到人員，或人員已停用。',
-      INVALID_TIME_RANGE:'結束時間不可早於或等於開始時間。',
-      INVALID_TIME_STEP:'時間只能選整點或半點。',
-      INVALID_HOUR_DECIMAL:'工時格式不符合 .0 或 .5。',
-      USERNAME_EXISTS:'帳號已存在。',
-      INVALID_ROLE:'角色錯誤。',
-      INVALID_TARGET:'管理目標錯誤。',
-      INVALID_STATUS:'狀態錯誤。',
-      NOT_FOUND:'找不到資料。',
-      ACTUAL_RECORD_NOT_FOUND:'找不到要修改的實際填報資料。',
-      MISSING_temp_plate_no:'請輸入臨時車號。'
-    };
-
-    if(code && code.startsWith('MISSING_')){
-      return `缺少必要欄位：${code.replace('MISSING_','')}`;
     }
 
-    return map[code] || `系統錯誤：${code}`;
-  }
-</script>
+    function borderAll(){
+      return {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    }
+
+    function modeText(mode){
+      if(mode === 'month') return '本月';
+      if(mode === 'year') return '本年';
+      return '本週';
+    }
+
+    function fileDateText(dateText){
+      return String(dateText || '').replaceAll('-','');
+    }
+
+    function openAdmin(){
+      openPage('adminPage');
+    }
+
+    function showAdminPanel(id){
+      document.querySelectorAll('.admin-panel').forEach(x=>x.classList.add('hide'));
+      document.getElementById(id).classList.remove('hide');
+    }
+
+    function showAdminPanelFromPre(id){
+      openAdmin();
+      showAdminPanel(id);
+    }
+
+    async function adminAddMember(){
+      try{
+        await api('adminAddMember',{
+          token:state.token,
+          display_name:value('newMemberName'),
+          department:value('newMemberDept')
+        });
+
+        showMsg('ok','人員已新增。');
+        clearAdminInputs();
+        await loadMasterData();
+      }catch(err){
+        showMsg('err', errorText(err.message));
+      }
+    }
+
+    async function adminAddProject(){
+      try{
+        await api('adminAddProject',{
+          token:state.token,
+          project_short_name:value('newProjectShort'),
+          project_full_name:value('newProjectFull'),
+          location:value('newProjectLocation')
+        });
+
+        showMsg('ok','案場已新增。');
+        clearAdminInputs();
+        await loadMasterData();
+      }catch(err){
+        showMsg('err', errorText(err.message));
+      }
+    }
+
+    async function adminAddVehicle(){
+      try{
+        await api('adminAddVehicle',{
+          token:state.token,
+          plate_no:value('newPlateNo'),
+          vehicle_name:value('newVehicleName'),
+          vehicle_type:value('newVehicleType')
+        });
+
+        showMsg('ok','車輛已新增。');
+        clearAdminInputs();
+        await loadMasterData();
+      }catch(err){
+        showMsg('err', errorText(err.message));
+      }
+    }
+
+    async function adminAddUser(){
+      try{
+        await api('adminAddUser',{
+          token:state.token,
+          username:value('newAdminUsername'),
+          password:value('newAdminPassword'),
+          display_name:value('newAdminName'),
+          role:'Admin',
+          department:value('newAdminDept')
+        });
+
+        showMsg('ok','管理帳號已新增。');
+        clearAdminInputs();
+        await loadMasterData();
+      }catch(err){
+        showMsg('err', errorText(err.message));
+      }
+    }
+
+    function clearAdminInputs(){
+      [
+        'newMemberName','newMemberDept',
+        'newProjectShort','newProjectFull','newProjectLocation',
+        'newPlateNo','newVehicleName','newVehicleType',
+        'newAdminUsername','newAdminPassword','newAdminName','newAdminDept'
+      ].forEach(id=>setValue(id,''));
+    }
+
+    function value(id){
+      const el = document.getElementById(id);
+      return el ? String(el.value || '').trim() : '';
+    }
+
+    function setValue(id,v){
+      const el = document.getElementById(id);
+      if(el) el.value = v || '';
+    }
+
+    function setText(id,v){
+      const el = document.getElementById(id);
+      if(el) el.textContent = v;
+    }
+
+    function toMinutes(t){
+      const [h,m] = t.split(':').map(Number);
+      return h * 60 + m;
+    }
+
+    function round1(n){
+      return Math.round(n * 10) / 10;
+    }
+
+    function formatDate(d){
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    }
+
+    function parseDate(s){
+      const [y,m,d] = s.split('-').map(Number);
+      return new Date(y,m-1,d);
+    }
+
+    function getMondayString(date){
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      d.setDate(d.getDate() + diff);
+      return formatDate(d);
+    }
+
+    function dateKey(s){
+      return String(s || '').replaceAll('/','-').slice(0,10);
+    }
+
+    function pad(n){
+      return String(n).padStart(2,'0');
+    }
+
+    function escapeHtml(str){
+      return String(str ?? '')
+        .replaceAll('&','&amp;')
+        .replaceAll('<','&lt;')
+        .replaceAll('>','&gt;')
+        .replaceAll('"','&quot;')
+        .replaceAll("'","&#039;");
+    }
+
+    function errorText(code){
+      const map = {
+        API_URL_NOT_SET:'尚未設定 Apps Script API 網址。',
+        MISSING_ACTION:'系統缺少 action。',
+        INVALID_ACTION:'系統功能不存在，請確認 Apps Script 是否已部署新版。',
+        INVALID_JSON:'資料格式錯誤。',
+        LOGIN_FAILED:'帳號或密碼錯誤，或帳號已停用。',
+        INVALID_TOKEN:'登入已失效，請重新登入。',
+        ADMIN_ONLY:'此功能限管理員使用。',
+        PROJECT_NOT_FOUND:'找不到案場，或案場已停用。',
+        VEHICLE_NOT_FOUND:'找不到車輛，或車輛已停用。',
+        USER_NOT_FOUND:'找不到人員，或人員已停用。',
+        INVALID_TIME_RANGE:'結束時間不可早於或等於開始時間。',
+        INVALID_TIME_STEP:'時間只能選整點或半點。',
+        INVALID_HOUR_DECIMAL:'工時格式不符合 .0 或 .5。',
+        USERNAME_EXISTS:'帳號已存在。',
+        INVALID_ROLE:'角色錯誤。',
+        INVALID_TARGET:'管理目標錯誤。',
+        INVALID_STATUS:'狀態錯誤。',
+        NOT_FOUND:'找不到資料。',
+        ACTUAL_RECORD_NOT_FOUND:'找不到要修改的實際填報資料。',
+        MISSING_temp_plate_no:'請輸入臨時車號。'
+      };
+
+      if(code && code.startsWith('MISSING_')){
+        return `缺少必要欄位：${code.replace('MISSING_','')}`;
+      }
+
+      return map[code] || `系統錯誤：${code}`;
+    }
+  </script>
 </body>
 </html>
