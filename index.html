@@ -1,1185 +1,1665 @@
-const CONFIG = {
-  SPREADSHEET_ID: 'https://script.google.com/macros/s/AKfycbyaRnoq4kGWhs-Cl1xi6qe5F0RJ0EWBj6gbHwvKLJZs4ljO15lr6HEzJjKkq6ZUJmkNyQ/exec',
-  SHEETS: {
-    USERS: 'Users',
-    PROJECTS: 'Projects',
-    VEHICLES: 'Vehicles',
-    PRE: 'PreSchedule',
-    ACTUAL: 'ActualRecords',
-    SETTINGS: 'Settings'
-  },
-  TIME_STEP_MINUTES: 30,
-  LUNCH_START: '12:00',
-  LUNCH_END: '13:00'
-};
-
-function doGet(e) {
-  return handleRequest(e);
-}
-
-function doPost(e) {
-  return handleRequest(e);
-}
-
-function handleRequest(e) {
-  try {
-    const params = getParams(e);
-    const action = clean(params.action);
-
-    if (!action) return jsonFail('MISSING_ACTION');
-
-    const routes = {
-      test: test,
-      login: login,
-      getMasterData: getMasterData,
-      getMyPreSchedule: getMyPreSchedule,
-      savePreSchedule: savePreSchedule,
-      saveActualRecord: saveActualRecord,
-      getActualRecords: getActualRecords,
-      updateActualRecord: updateActualRecord,
-      getWeeklyOverview: getWeeklyOverview,
-      getStats: getStats,
-      getProjectSummary: getProjectSummary,
-      getPersonSummary: getPersonSummary,
-      adminAddUser: adminAddUser,
-      adminAddMember: adminAddMember,
-      adminAddProject: adminAddProject,
-      adminAddVehicle: adminAddVehicle,
-      adminUpdateStatus: adminUpdateStatus,
-      adminGetRecords: adminGetRecords,
-      debugUsers: debugUsers
-    };
-
-    if (!routes[action]) return jsonFail('INVALID_ACTION');
-
-    return jsonSuccess(routes[action](params));
-  } catch (err) {
-    return jsonFail(err.message || String(err));
-  }
-}
-
-function test() {
-  return {
-    message: 'API_OK',
-    spreadsheetId: CONFIG.SPREADSHEET_ID,
-    time: nowText()
-  };
-}
-
-function getParams(e) {
-  if (!e) return {};
-
-  if (e.postData && e.postData.contents) {
-    try {
-      return JSON.parse(e.postData.contents);
-    } catch (err) {
-      throw new Error('INVALID_JSON');
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>工程出工管理平台</title>
+  <style>
+    :root{
+      --bg:#f4f7fb;
+      --card:#ffffff;
+      --text:#172033;
+      --muted:#64748b;
+      --line:#dbe3ef;
+      --primary:#2563eb;
+      --primary-dark:#1d4ed8;
+      --danger:#dc2626;
+      --success:#16a34a;
+      --disabled:#cbd5e1;
     }
-  }
 
-  return e.parameter || {};
-}
+    *{box-sizing:border-box}
 
-function ss() {
-  return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
-}
-
-function sheet(name) {
-  const sh = ss().getSheetByName(name);
-  if (!sh) throw new Error('SHEET_NOT_FOUND_' + name);
-  return sh;
-}
-
-function jsonSuccess(data) {
-  return ContentService
-    .createTextOutput(JSON.stringify({ ok: true, data: data }))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-function jsonFail(message) {
-  return ContentService
-    .createTextOutput(JSON.stringify({ ok: false, error: message }))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-function clean(value) {
-  if (value === null || value === undefined) return '';
-  return String(value).trim();
-}
-
-function dateKey(value) {
-  return clean(value).replaceAll('/', '-').slice(0, 10);
-}
-
-function normalizeCell(value) {
-  if (value instanceof Date) {
-    return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
-  }
-
-  if (value === null || value === undefined) return '';
-
-  return String(value).trim();
-}
-
-function nowText() {
-  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
-}
-
-function readRows(sheetName) {
-  const sh = sheet(sheetName);
-  const values = sh.getDataRange().getValues();
-
-  if (values.length < 2) return [];
-
-  const headers = values[0].map(h => clean(h));
-
-  return values.slice(1)
-    .filter(row => row.some(cell => cell !== '' && cell !== null))
-    .map(row => {
-      const obj = {};
-      headers.forEach((h, i) => {
-        obj[h] = normalizeCell(row[i]);
-      });
-      return obj;
-    });
-}
-
-function appendRow(sheetName, obj) {
-  const sh = sheet(sheetName);
-  const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(h => clean(h));
-  const row = headers.map(h => obj[h] !== undefined ? obj[h] : '');
-  sh.appendRow(row);
-  return obj;
-}
-
-function updateRows(sheetName, matcher, updater) {
-  const sh = sheet(sheetName);
-  const values = sh.getDataRange().getValues();
-
-  if (values.length < 2) return 0;
-
-  const headers = values[0].map(h => clean(h));
-  let count = 0;
-
-  for (let r = 1; r < values.length; r++) {
-    const obj = {};
-
-    headers.forEach((h, i) => {
-      obj[h] = normalizeCell(values[r][i]);
-    });
-
-    if (matcher(obj)) {
-      const updated = updater(obj);
-
-      headers.forEach((h, i) => {
-        if (updated[h] !== undefined) {
-          sh.getRange(r + 1, i + 1).setValue(updated[h]);
-        }
-      });
-
-      count++;
+    body{
+      margin:0;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft JhengHei",Arial,sans-serif;
+      background:var(--bg);
+      color:var(--text);
     }
-  }
 
-  return count;
-}
-
-function requireFields(params, fields) {
-  fields.forEach(f => {
-    if (!clean(params[f])) {
-      throw new Error('MISSING_' + f);
+    .app{
+      max-width:880px;
+      margin:0 auto;
+      padding:16px;
+      padding-bottom:80px;
     }
-  });
-}
 
-function makeId(prefix) {
-  return prefix +
-    Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMddHHmmss') +
-    String(Math.floor(Math.random() * 1000)).padStart(3, '0');
-}
-
-function makeNextCode(prefix, rows, key) {
-  let max = 0;
-
-  rows.forEach(row => {
-    const val = clean(row[key]);
-
-    if (val.startsWith(prefix)) {
-      const num = Number(val.replace(prefix, ''));
-
-      if (!isNaN(num) && num > max) {
-        max = num;
-      }
+    .title{
+      font-size:24px;
+      font-weight:900;
+      margin:8px 0 4px;
     }
-  });
 
-  return prefix + String(max + 1).padStart(3, '0');
-}
-
-function login(params) {
-  requireFields(params, ['username', 'password']);
-
-  const username = clean(params.username);
-  const password = clean(params.password);
-  const users = readRows(CONFIG.SHEETS.USERS);
-
-  const user = users.find(u =>
-    clean(u.username) === username &&
-    clean(u.password) === password &&
-    clean(u.status).toLowerCase() === 'active'
-  );
-
-  if (!user) throw new Error('LOGIN_FAILED');
-
-  if (clean(user.role) !== 'Admin') {
-    throw new Error('ADMIN_ONLY');
-  }
-
-  const token = Utilities.getUuid();
-
-  updateRows(
-    CONFIG.SHEETS.USERS,
-    row => clean(row.user_id) === clean(user.user_id),
-    row => ({
-      ...row,
-      token: token,
-      last_login_at: nowText()
-    })
-  );
-
-  return {
-    token: token,
-    user: {
-      user_id: clean(user.user_id),
-      username: clean(user.username),
-      display_name: clean(user.display_name),
-      role: clean(user.role),
-      department: clean(user.department)
+    .subtitle{
+      color:var(--muted);
+      font-size:13px;
+      margin-bottom:16px;
     }
-  };
-}
 
-function findActiveUserByToken(token) {
-  const tokenValue = clean(token);
-
-  if (!tokenValue) throw new Error('INVALID_TOKEN');
-
-  const users = readRows(CONFIG.SHEETS.USERS);
-
-  const user = users.find(u =>
-    clean(u.token) === tokenValue &&
-    clean(u.status).toLowerCase() === 'active'
-  );
-
-  if (!user) throw new Error('INVALID_TOKEN');
-
-  return user;
-}
-
-function requireAdmin(token) {
-  const user = findActiveUserByToken(token);
-
-  if (clean(user.role) !== 'Admin') {
-    throw new Error('ADMIN_ONLY');
-  }
-
-  return user;
-}
-
-function getMasterData(params) {
-  requireAdmin(params.token);
-
-  const projects = readRows(CONFIG.SHEETS.PROJECTS)
-    .filter(p => clean(p.status).toLowerCase() === 'active');
-
-  const vehicles = readRows(CONFIG.SHEETS.VEHICLES)
-    .filter(v => clean(v.status).toLowerCase() === 'active');
-
-  const users = readRows(CONFIG.SHEETS.USERS)
-    .filter(u => clean(u.status).toLowerCase() === 'active')
-    .map(u => ({
-      user_id: clean(u.user_id),
-      username: clean(u.username),
-      display_name: clean(u.display_name),
-      department: clean(u.department),
-      role: clean(u.role)
-    }));
-
-  return {
-    projects: projects,
-    vehicles: vehicles,
-    users: users
-  };
-}
-
-function getActiveProject(projectId) {
-  const id = clean(projectId);
-  const projects = readRows(CONFIG.SHEETS.PROJECTS);
-
-  const project = projects.find(p =>
-    clean(p.project_id) === id &&
-    clean(p.status).toLowerCase() === 'active'
-  );
-
-  if (!project) throw new Error('PROJECT_NOT_FOUND');
-
-  return project;
-}
-
-function getActiveMember(userId) {
-  const id = clean(userId);
-  const users = readRows(CONFIG.SHEETS.USERS);
-
-  const user = users.find(u =>
-    clean(u.user_id) === id &&
-    clean(u.status).toLowerCase() === 'active'
-  );
-
-  if (!user) throw new Error('USER_NOT_FOUND');
-
-  return user;
-}
-
-function getVehicleByInput(params) {
-  const vehicleId = clean(params.vehicle_id);
-
-  if (vehicleId === 'NO_CAR') {
-    return {
-      vehicle_id: 'NO_CAR',
-      plate_no: '不使用車輛'
-    };
-  }
-
-  if (vehicleId === 'TEMP') {
-    const plateNo = clean(params.temp_plate_no);
-
-    if (!plateNo) throw new Error('MISSING_temp_plate_no');
-
-    return {
-      vehicle_id: 'TEMP',
-      plate_no: plateNo
-    };
-  }
-
-  const vehicles = readRows(CONFIG.SHEETS.VEHICLES);
-
-  const vehicle = vehicles.find(v =>
-    clean(v.vehicle_id) === vehicleId &&
-    clean(v.status).toLowerCase() === 'active'
-  );
-
-  if (!vehicle) throw new Error('VEHICLE_NOT_FOUND');
-
-  return vehicle;
-}
-
-function getMyPreSchedule(params) {
-  requireAdmin(params.token);
-
-  requireFields(params, ['work_date']);
-
-  const workDate = dateKey(params.work_date);
-  const userId = clean(params.user_id);
-
-  const rows = readRows(CONFIG.SHEETS.PRE)
-    .filter(r => {
-      if (dateKey(r.work_date) !== workDate) return false;
-      if (clean(r.status).toLowerCase() !== 'active') return false;
-      if (userId && clean(r.user_id) !== userId) return false;
-      return true;
-    });
-
-  return rows;
-}
-
-function savePreSchedule(params) {
-  requireAdmin(params.token);
-
-  requireFields(params, [
-    'user_id',
-    'work_date',
-    'project_id',
-    'vehicle_id',
-    'start_time',
-    'end_time',
-    'work_type',
-    'work_note'
-  ]);
-
-  const member = getActiveMember(params.user_id);
-  const project = getActiveProject(params.project_id);
-  const vehicle = getVehicleByInput(params);
-  const hourObj = calculateNetHours(params.start_time, params.end_time);
-  const workDate = dateKey(params.work_date);
-  const weekKey = getWeekKey(workDate);
-
-  const preId = makeId('PRE');
-  const actualId = makeId('ACT');
-
-  const preObj = {
-    record_id: preId,
-    user_id: clean(member.user_id),
-    display_name: clean(member.display_name),
-    work_date: workDate,
-    week_key: weekKey,
-    project_id: clean(project.project_id),
-    project_short_name: clean(project.project_short_name),
-    vehicle_id: clean(vehicle.vehicle_id),
-    plate_no: clean(vehicle.plate_no),
-    start_time: clean(params.start_time),
-    end_time: clean(params.end_time),
-    work_hours: hourObj.net_hours,
-    work_type: clean(params.work_type),
-    work_note: clean(params.work_note),
-    status: 'active',
-    created_at: nowText(),
-    updated_at: nowText(),
-    synced_actual_id: actualId
-  };
-
-  const actualObj = {
-    record_id: actualId,
-    source_pre_id: preId,
-    user_id: clean(member.user_id),
-    display_name: clean(member.display_name),
-    work_date: workDate,
-    week_key: weekKey,
-    project_id: clean(project.project_id),
-    project_short_name: clean(project.project_short_name),
-    vehicle_id: clean(vehicle.vehicle_id),
-    plate_no: clean(vehicle.plate_no),
-    start_time: clean(params.start_time),
-    end_time: clean(params.end_time),
-    work_hours: hourObj.net_hours,
-    work_type: clean(params.work_type),
-    work_note: clean(params.work_note),
-    status: 'active',
-    created_at: nowText(),
-    updated_at: nowText(),
-    source_type: 'pre_sync',
-    change_reason: ''
-  };
-
-  appendRow(CONFIG.SHEETS.PRE, preObj);
-  appendRow(CONFIG.SHEETS.ACTUAL, actualObj);
-
-  return {
-    pre: preObj,
-    actual: actualObj,
-    hours: hourObj
-  };
-}
-
-function saveActualRecord(params) {
-  requireAdmin(params.token);
-
-  requireFields(params, [
-    'user_id',
-    'work_date',
-    'project_id',
-    'vehicle_id',
-    'start_time',
-    'end_time',
-    'work_type',
-    'work_note'
-  ]);
-
-  const member = getActiveMember(params.user_id);
-  const project = getActiveProject(params.project_id);
-  const vehicle = getVehicleByInput(params);
-  const hourObj = calculateNetHours(params.start_time, params.end_time);
-  const workDate = dateKey(params.work_date);
-  const weekKey = getWeekKey(workDate);
-
-  const obj = {
-    record_id: makeId('ACT'),
-    source_pre_id: clean(params.source_pre_id),
-    user_id: clean(member.user_id),
-    display_name: clean(member.display_name),
-    work_date: workDate,
-    week_key: weekKey,
-    project_id: clean(project.project_id),
-    project_short_name: clean(project.project_short_name),
-    vehicle_id: clean(vehicle.vehicle_id),
-    plate_no: clean(vehicle.plate_no),
-    start_time: clean(params.start_time),
-    end_time: clean(params.end_time),
-    work_hours: hourObj.net_hours,
-    work_type: clean(params.work_type),
-    work_note: clean(params.work_note),
-    status: 'active',
-    created_at: nowText(),
-    updated_at: nowText(),
-    source_type: clean(params.source_type) || 'manual_actual',
-    change_reason: clean(params.change_reason)
-  };
-
-  return appendRow(CONFIG.SHEETS.ACTUAL, obj);
-}
-
-function getActualRecords(params) {
-  requireAdmin(params.token);
-
-  const workDate = dateKey(params.work_date);
-  const userId = clean(params.user_id);
-  const projectId = clean(params.project_id);
-
-  const rows = readRows(CONFIG.SHEETS.ACTUAL)
-    .filter(r => {
-      if (clean(r.status).toLowerCase() !== 'active') return false;
-      if (workDate && dateKey(r.work_date) !== workDate) return false;
-      if (userId && clean(r.user_id) !== userId) return false;
-      if (projectId && clean(r.project_id) !== projectId) return false;
-      return true;
-    });
-
-  rows.sort((a, b) => {
-    const x = dateKey(a.work_date) + clean(a.project_id) + clean(a.display_name);
-    const y = dateKey(b.work_date) + clean(b.project_id) + clean(b.display_name);
-    return x.localeCompare(y);
-  });
-
-  return rows;
-}
-
-function updateActualRecord(params) {
-  requireAdmin(params.token);
-
-  requireFields(params, [
-    'record_id',
-    'user_id',
-    'work_date',
-    'project_id',
-    'vehicle_id',
-    'start_time',
-    'end_time',
-    'work_type',
-    'work_note'
-  ]);
-
-  const member = getActiveMember(params.user_id);
-  const project = getActiveProject(params.project_id);
-  const vehicle = getVehicleByInput(params);
-  const hourObj = calculateNetHours(params.start_time, params.end_time);
-  const workDate = dateKey(params.work_date);
-  const weekKey = getWeekKey(workDate);
-
-  const count = updateRows(
-    CONFIG.SHEETS.ACTUAL,
-    row => clean(row.record_id) === clean(params.record_id),
-    row => ({
-      ...row,
-      user_id: clean(member.user_id),
-      display_name: clean(member.display_name),
-      work_date: workDate,
-      week_key: weekKey,
-      project_id: clean(project.project_id),
-      project_short_name: clean(project.project_short_name),
-      vehicle_id: clean(vehicle.vehicle_id),
-      plate_no: clean(vehicle.plate_no),
-      start_time: clean(params.start_time),
-      end_time: clean(params.end_time),
-      work_hours: hourObj.net_hours,
-      work_type: clean(params.work_type),
-      work_note: clean(params.work_note),
-      updated_at: nowText(),
-      source_type: 'actual_modified',
-      change_reason: clean(params.change_reason)
-    })
-  );
-
-  if (count === 0) throw new Error('ACTUAL_RECORD_NOT_FOUND');
-
-  return {
-    updated: count,
-    hours: hourObj
-  };
-}
-
-function getWeeklyOverview(params) {
-  requireAdmin(params.token);
-
-  requireFields(params, ['week_start']);
-
-  const weekStart = parseDateOnly(dateKey(params.week_start));
-  const dates = [];
-
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(weekStart);
-    d.setDate(d.getDate() + i);
-    dates.push(formatDateOnly(d));
-  }
-
-  const source = clean(params.source) === 'pre'
-    ? CONFIG.SHEETS.PRE
-    : CONFIG.SHEETS.ACTUAL;
-
-  const rows = readRows(source)
-    .filter(r =>
-      clean(r.status).toLowerCase() === 'active' &&
-      dates.includes(dateKey(r.work_date))
-    );
-
-  const projects = readRows(CONFIG.SHEETS.PROJECTS)
-    .filter(p => clean(p.status).toLowerCase() === 'active');
-
-  const result = {
-    source: clean(params.source) === 'pre' ? 'pre' : 'actual',
-    week_start: dateKey(params.week_start),
-    week_end: dates[6],
-    dates: dates,
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:16px;
+      margin-bottom:14px;
+      box-shadow:0 6px 18px rgba(15,23,42,.06);
+    }
+
+    .section-title{
+      font-size:18px;
+      font-weight:900;
+      margin:6px 0 12px;
+    }
+
+    .grid{
+      display:grid;
+      gap:12px;
+    }
+
+    .grid-2{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+
+    .grid-3{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;
+    }
+
+    label{
+      font-size:13px;
+      color:#374151;
+      font-weight:800;
+      display:block;
+      margin-bottom:6px;
+    }
+
+    input,select,textarea{
+      width:100%;
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:12px;
+      padding:12px;
+      font-size:15px;
+      outline:none;
+    }
+
+    textarea{
+      min-height:82px;
+      resize:vertical;
+    }
+
+    input:focus,select:focus,textarea:focus{
+      border-color:var(--primary);
+      box-shadow:0 0 0 3px rgba(37,99,235,.12);
+    }
+
+    button{
+      border:0;
+      border-radius:14px;
+      padding:13px 14px;
+      font-size:15px;
+      font-weight:900;
+      cursor:pointer;
+      width:100%;
+      background:var(--primary);
+      color:#fff;
+    }
+
+    button:hover{background:var(--primary-dark)}
+
+    button:disabled{
+      background:var(--disabled);
+      color:#64748b;
+      cursor:not-allowed;
+    }
+
+    .btn-secondary{
+      background:#e8eefc;
+      color:#1e40af;
+    }
+
+    .btn-secondary:hover{background:#dbe7ff}
+
+    .btn-danger{
+      background:#fee2e2;
+      color:#991b1b;
+    }
+
+    .btn-danger:hover{background:#fecaca}
+
+    .btn-ghost{
+      background:#f1f5f9;
+      color:#334155;
+    }
+
+    .hide{display:none!important}
+
+    .topbar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:12px;
+    }
+
+    .topbar button{
+      width:auto;
+      padding:9px 12px;
+      font-size:13px;
+    }
+
+    .nav{
+      display:grid;
+      gap:10px;
+    }
+
+    .nav button{
+      text-align:left;
+      padding:16px;
+    }
+
+    .msg{
+      padding:12px;
+      border-radius:14px;
+      font-size:14px;
+      margin-bottom:12px;
+      display:none;
+      white-space:pre-wrap;
+    }
+
+    .msg.show{display:block}
+
+    .msg.ok{
+      background:#dcfce7;
+      color:#166534;
+      border:1px solid #86efac;
+    }
+
+    .msg.err{
+      background:#fee2e2;
+      color:#991b1b;
+      border:1px solid #fecaca;
+    }
+
+    .msg.info{
+      background:#eff6ff;
+      color:#1e40af;
+      border:1px solid #bfdbfe;
+    }
+
+    .small{
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.5;
+    }
+
+    .divider{
+      height:1px;
+      background:var(--line);
+      margin:14px 0;
+    }
+
+    .tabs{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;
+      margin-bottom:12px;
+    }
+
+    .tabs button{
+      padding:10px;
+      font-size:13px;
+      background:#f1f5f9;
+      color:#334155;
+    }
+
+    .tabs button.active{
+      background:var(--primary);
+      color:#fff;
+    }
+
+    .stat-row{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+    }
+
+    .stat{
+      background:#f8fafc;
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:14px;
+    }
+
+    .stat .cap{
+      color:var(--muted);
+      font-size:12px;
+      font-weight:800;
+    }
+
+    .stat .num{
+      font-size:24px;
+      font-weight:900;
+      margin-top:4px;
+    }
+
+    .week-wrap{
+      overflow-x:auto;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:#fff;
+    }
+
+    table{
+      border-collapse:collapse;
+      min-width:850px;
+      width:100%;
+      font-size:13px;
+    }
+
+    th,td{
+      border:1px solid var(--line);
+      padding:10px;
+      vertical-align:top;
+      min-width:105px;
+    }
+
+    th{
+      background:#f8fafc;
+      font-weight:900;
+    }
+
+    .project-cell{
+      min-width:140px;
+      font-weight:900;
+      background:#f8fafc;
+      position:sticky;
+      left:0;
+      z-index:2;
+    }
+
+    .day-cell{
+      min-height:60px;
+      cursor:pointer;
+      background:#fff;
+    }
+
+    .day-cell:hover{background:#eff6ff}
+
+    .person-chip{
+      display:inline-block;
+      background:#e0f2fe;
+      color:#075985;
+      border-radius:999px;
+      padding:4px 7px;
+      margin:2px;
+      font-size:12px;
+      font-weight:800;
+    }
+
+    .record{
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:12px;
+      margin-bottom:10px;
+      background:#fff;
+    }
+
+    .record b{
+      display:block;
+      margin-bottom:5px;
+    }
+
+    .summary-block{
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:14px;
+      margin-bottom:12px;
+      background:#fff;
+    }
+
+    .summary-title{
+      font-size:16px;
+      font-weight:900;
+      margin-bottom:6px;
+    }
+
+    .summary-meta{
+      font-size:13px;
+      color:#334155;
+      margin-bottom:8px;
+      line-height:1.7;
+    }
+
+    .mini-table{
+      min-width:100%;
+      width:100%;
+      font-size:13px;
+    }
+
+    .mini-table th,.mini-table td{
+      min-width:auto;
+      padding:8px;
+    }
+
+    .pill{
+      display:inline-block;
+      background:#eef2ff;
+      color:#3730a3;
+      border-radius:999px;
+      padding:4px 8px;
+      margin:2px;
+      font-size:12px;
+      font-weight:800;
+    }
+
+    .hour-box{
+      background:#f8fafc;
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:12px;
+      line-height:1.8;
+      font-size:14px;
+    }
+  </style>
+</head>
+
+<body>
+<div class="app">
+  <div class="title">工程出工管理平台</div>
+  <div class="subtitle" id="todayText"></div>
+  <div id="globalMsg" class="msg"></div>
+
+  <section id="loginPage" class="card">
+    <div class="section-title">管理員登入</div>
+    <div class="grid">
+      <div>
+        <label>帳號</label>
+        <input id="loginUsername" autocomplete="username" />
+      </div>
+      <div>
+        <label>密碼</label>
+        <input id="loginPassword" type="password" autocomplete="current-password" />
+      </div>
+      <button id="loginBtn" onclick="login()">登入</button>
+    </div>
+  </section>
+
+  <section id="homePage" class="hide">
+    <div class="card">
+      <div class="topbar">
+        <div>
+          <b id="loginName"></b>
+          <div class="small" id="loginRole"></div>
+        </div>
+        <button class="btn-ghost" onclick="logout()">登出</button>
+      </div>
+
+      <div class="nav">
+        <button onclick="openPrePage()">① 每週預排填報</button>
+        <button onclick="openActualPage()">② 實際填報修正</button>
+        <button onclick="openDashboard()">③ 出工總覽</button>
+        <button onclick="openAdmin()">④ 後台管理</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="prePage" class="hide">
+    <div class="card">
+      <div class="topbar">
+        <div class="section-title">每週預排填報</div>
+        <button class="btn-ghost" onclick="openPage('homePage')">返回</button>
+      </div>
+
+      <div class="msg info show">
+        預排儲存後，系統會自動同步一筆到「實際填報」。若沒有變更，財務與人資直接以實際填報資料為準。
+      </div>
+
+      <div class="grid">
+        <div>
+          <label>出工日期</label>
+          <input id="preDate" type="date" onchange="validatePreForm()" />
+        </div>
+
+        <div>
+          <label>人員名稱</label>
+          <select id="preUser" onchange="validatePreForm()"></select>
+        </div>
+
+        <button class="btn-secondary" onclick="showAdminPanelFromPre('memberPanel')">＋新增人員</button>
+
+        <div>
+          <label>案場</label>
+          <select id="preProject" onchange="validatePreForm()"></select>
+        </div>
+
+        <button class="btn-secondary" onclick="showAdminPanelFromPre('projectPanel')">＋新增案場</button>
+
+        <div>
+          <label>車輛</label>
+          <select id="preVehicle" onchange="toggleTempVehicle('pre'); validatePreForm()"></select>
+        </div>
+
+        <div id="preTempVehicleBox" class="hide">
+          <label>臨時車號</label>
+          <input id="preTempPlateNo" oninput="validatePreForm()" placeholder="例：ABC-1234" />
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <label>開始時間</label>
+            <select id="preStart" onchange="updateHours('pre'); validatePreForm()"></select>
+          </div>
+          <div>
+            <label>結束時間</label>
+            <select id="preEnd" onchange="updateHours('pre'); validatePreForm()"></select>
+          </div>
+        </div>
+
+        <div class="hour-box">
+          原始時數：<b id="preGross">0.0</b> 小時<br>
+          午休扣除：<b id="preLunch">0.0</b> 小時<br>
+          預排工時：<b id="preNet">0.0</b> 小時
+        </div>
+
+        <div>
+          <label>工作類型</label>
+          <select id="preWorkType" onchange="validatePreForm()">
+            <option value="">請選擇</option>
+            <option>施工</option>
+            <option>查驗</option>
+            <option>測試</option>
+            <option>維修</option>
+            <option>現場協調</option>
+            <option>其他</option>
+          </select>
+        </div>
+
+        <div>
+          <label>工作內容</label>
+          <textarea id="preNote" oninput="validatePreForm()"></textarea>
+        </div>
+
+        <button id="savePreBtn" onclick="savePreSchedule()" disabled>儲存預排並同步實際填報</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="actualPage" class="hide">
+    <div class="card">
+      <div class="topbar">
+        <div class="section-title">實際填報修正</div>
+        <button class="btn-ghost" onclick="openPage('homePage')">返回</button>
+      </div>
+
+      <div class="grid">
+        <div>
+          <label>查詢日期</label>
+          <input id="actualSearchDate" type="date" />
+        </div>
+        <div>
+          <label>人員</label>
+          <select id="actualSearchUser"></select>
+        </div>
+        <div>
+          <label>案場</label>
+          <select id="actualSearchProject"></select>
+        </div>
+        <button onclick="loadActualRecords()">查詢實際填報資料</button>
+      </div>
+    </div>
+
+    <div id="actualListCard" class="card hide">
+      <div class="section-title">實際填報清單</div>
+      <div id="actualList"></div>
+    </div>
+
+    <div id="actualEditCard" class="card hide">
+      <div class="topbar">
+        <div class="section-title">編輯實際出工</div>
+        <button class="btn-ghost" onclick="closeActualEdit()">關閉</button>
+      </div>
+
+      <div class="grid">
+        <input id="editRecordId" type="hidden" />
+
+        <div>
+          <label>人員名稱</label>
+          <select id="editUser" onchange="validateEditForm()"></select>
+        </div>
+
+        <div>
+          <label>出工日期</label>
+          <input id="editDate" type="date" onchange="validateEditForm()" />
+        </div>
+
+        <div>
+          <label>案場</label>
+          <select id="editProject" onchange="validateEditForm()"></select>
+        </div>
+
+        <div>
+          <label>車輛</label>
+          <select id="editVehicle" onchange="toggleTempVehicle('edit'); validateEditForm()"></select>
+        </div>
+
+        <div id="editTempVehicleBox" class="hide">
+          <label>臨時車號</label>
+          <input id="editTempPlateNo" oninput="validateEditForm()" />
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <label>開始時間</label>
+            <select id="editStart" onchange="updateHours('edit'); validateEditForm()"></select>
+          </div>
+          <div>
+            <label>結束時間</label>
+            <select id="editEnd" onchange="updateHours('edit'); validateEditForm()"></select>
+          </div>
+        </div>
+
+        <div class="hour-box">
+          原始時數：<b id="editGross">0.0</b> 小時<br>
+          午休扣除：<b id="editLunch">0.0</b> 小時<br>
+          實際工時：<b id="editNet">0.0</b> 小時
+        </div>
+
+        <div>
+          <label>工作類型</label>
+          <select id="editWorkType" onchange="validateEditForm()">
+            <option value="">請選擇</option>
+            <option>施工</option>
+            <option>查驗</option>
+            <option>測試</option>
+            <option>維修</option>
+            <option>現場協調</option>
+            <option>其他</option>
+          </select>
+        </div>
+
+        <div>
+          <label>工作內容</label>
+          <textarea id="editNote" oninput="validateEditForm()"></textarea>
+        </div>
+
+        <div>
+          <label>變更原因</label>
+          <textarea id="editReason" oninput="validateEditForm()"></textarea>
+        </div>
+
+        <button id="saveEditBtn" onclick="updateActualRecord()" disabled>儲存實際變更</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="dashboardPage" class="hide">
+    <div class="card">
+      <div class="topbar">
+        <div class="section-title">出工總覽</div>
+        <button class="btn-ghost" onclick="openPage('homePage')">返回</button>
+      </div>
+
+      <div class="tabs">
+        <button id="dashBoardTab" class="active" onclick="showDashboardTab('board')">白板</button>
+        <button id="dashProjectTab" onclick="showDashboardTab('project')">案場統計</button>
+        <button id="dashPersonTab" onclick="showDashboardTab('person')">人員統計</button>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat"><div class="cap">本週人次</div><div class="num" id="weekCount">0</div></div>
+        <div class="stat"><div class="cap">本週工時</div><div class="num" id="weekHours">0</div></div>
+        <div class="stat"><div class="cap">本月人次</div><div class="num" id="monthCount">0</div></div>
+        <div class="stat"><div class="cap">本月工時</div><div class="num" id="monthHours">0</div></div>
+        <div class="stat"><div class="cap">本年人次</div><div class="num" id="yearCount">0</div></div>
+        <div class="stat"><div class="cap">本年工時</div><div class="num" id="yearHours">0</div></div>
+      </div>
+    </div>
+
+    <div id="boardPanel">
+      <div class="card">
+        <div class="tabs">
+          <button id="dashActualBtn" class="active" onclick="setDashSource('actual')">實際資料</button>
+          <button id="dashPreBtn" onclick="setDashSource('pre')">預排資料</button>
+          <button onclick="loadWeeklyOverview()">更新</button>
+        </div>
+
+        <div class="grid-2">
+          <button class="btn-secondary" onclick="changeWeek(-7)">上一週</button>
+          <button class="btn-secondary" onclick="changeWeek(7)">下一週</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="section-title" id="weekTitle">週排程表</div>
+        <div class="small">可左右滑動；點擊格子可查看人員、工時、車號與工作內容。</div>
+        <div class="week-wrap" id="weekTableWrap"></div>
+      </div>
+
+      <div id="detailCard" class="card hide">
+        <div class="topbar">
+          <div class="section-title" id="detailTitle">明細</div>
+          <button class="btn-ghost" onclick="hideDetail()">關閉</button>
+        </div>
+        <div id="detailContent"></div>
+      </div>
+    </div>
+
+    <div id="projectPanelDash" class="hide">
+      <div class="card">
+        <div class="section-title">案場別出工統計</div>
+        <div class="tabs">
+          <button id="projectWeekBtn" class="active" onclick="setProjectSummaryMode('week')">本週</button>
+          <button id="projectMonthBtn" onclick="setProjectSummaryMode('month')">本月</button>
+          <button id="projectYearBtn" onclick="setProjectSummaryMode('year')">本年</button>
+        </div>
+        <div id="projectSummary"></div>
+      </div>
+    </div>
+
+    <div id="personPanelDash" class="hide">
+      <div class="card">
+        <div class="section-title">人員出工統計</div>
+        <div class="tabs">
+          <button id="personWeekBtn" class="active" onclick="setPersonSummaryMode('week')">本週</button>
+          <button id="personMonthBtn" onclick="setPersonSummaryMode('month')">本月</button>
+          <button id="personYearBtn" onclick="setPersonSummaryMode('year')">本年</button>
+        </div>
+        <div id="personSummary"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="adminPage" class="hide">
+    <div class="card">
+      <div class="topbar">
+        <div class="section-title">後台管理</div>
+        <button class="btn-ghost" onclick="openPage('homePage')">返回</button>
+      </div>
+
+      <div class="nav">
+        <button onclick="showAdminPanel('memberPanel')">新增人員</button>
+        <button onclick="showAdminPanel('projectPanel')">新增案場</button>
+        <button onclick="showAdminPanel('vehiclePanel')">新增車輛</button>
+        <button onclick="showAdminPanel('adminUserPanel')">新增管理帳號</button>
+      </div>
+    </div>
+
+    <div id="memberPanel" class="card hide admin-panel">
+      <div class="section-title">新增人員</div>
+      <div class="grid">
+        <input id="newMemberName" placeholder="姓名" />
+        <input id="newMemberDept" placeholder="部門，例如 工程部" />
+        <button onclick="adminAddMember()">新增人員</button>
+      </div>
+    </div>
+
+    <div id="projectPanel" class="card hide admin-panel">
+      <div class="section-title">新增案場</div>
+      <div class="grid">
+        <input id="newProjectShort" placeholder="案場簡稱" />
+        <textarea id="newProjectFull" placeholder="完整案名"></textarea>
+        <input id="newProjectLocation" placeholder="地點" />
+        <button onclick="adminAddProject()">新增案場</button>
+      </div>
+    </div>
+
+    <div id="vehiclePanel" class="card hide admin-panel">
+      <div class="section-title">新增車輛</div>
+      <div class="grid">
+        <input id="newPlateNo" placeholder="車號，例如 R001" />
+        <input id="newVehicleName" placeholder="車輛名稱，例如 公司車" />
+        <input id="newVehicleType" placeholder="車種，例如 小客車 / 工程車" />
+        <button onclick="adminAddVehicle()">新增車輛</button>
+      </div>
+    </div>
+
+    <div id="adminUserPanel" class="card hide admin-panel">
+      <div class="section-title">新增管理帳號</div>
+      <div class="grid">
+        <input id="newAdminUsername" placeholder="帳號" />
+        <input id="newAdminPassword" placeholder="密碼" />
+        <input id="newAdminName" placeholder="姓名" />
+        <input id="newAdminDept" placeholder="部門" />
+        <button onclick="adminAddUser()">新增管理帳號</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  const API_URL = 'https://script.google.com/macros/s/AKfycbyaRnoq4kGWhs-Cl1xi6qe5F0RJ0EWBj6gbHwvKLJZs4ljO15lr6HEzJjKkq6ZUJmkNyQ/exec';
+
+  const state = {
+    token: localStorage.getItem('dispatch_token') || '',
+    user: JSON.parse(localStorage.getItem('dispatch_user') || 'null'),
     projects: [],
-    rows: rows
+    vehicles: [],
+    users: [],
+    dashSource: 'actual',
+    currentWeekStart: getMondayString(new Date()),
+    projectSummaryMode: 'week',
+    personSummaryMode: 'week'
   };
 
-  projects.forEach(project => {
-    const item = {
-      project_id: clean(project.project_id),
-      project_short_name: clean(project.project_short_name),
-      days: {}
-    };
+  document.addEventListener('DOMContentLoaded', init);
 
-    dates.forEach(date => {
-      const records = rows.filter(r =>
-        clean(r.project_id) === clean(project.project_id) &&
-        dateKey(r.work_date) === date
-      );
+  function init(){
+    setTodayText();
+    fillTimeOptions();
+    setDefaultDates();
 
-      item.days[date] = {
-        count: records.length,
-        hours: sum(records.map(r => Number(r.work_hours || 0))),
-        names: records.map(r => clean(r.display_name)),
-        records: records
-      };
+    if(state.token && state.user){
+      showLoggedIn();
+      loadMasterData();
+    }else{
+      openPage('loginPage');
+    }
+  }
+
+  function setTodayText(){
+    const d = new Date();
+    const days = ['日','一','二','三','四','五','六'];
+    document.getElementById('todayText').textContent =
+      `今日：${formatDate(d)}（週${days[d.getDay()]}）`;
+  }
+
+  function setDefaultDates(){
+    const today = formatDate(new Date());
+    const nextWeek = new Date();
+    nextWeek.setDate(nextWeek.getDate() + 7);
+
+    document.getElementById('preDate').value = formatDate(nextWeek);
+    document.getElementById('actualSearchDate').value = today;
+  }
+
+  function openPage(id){
+    ['loginPage','homePage','prePage','actualPage','dashboardPage','adminPage'].forEach(x=>{
+      document.getElementById(x).classList.add('hide');
+    });
+    document.getElementById(id).classList.remove('hide');
+    clearMsg();
+  }
+
+  function showLoggedIn(){
+    openPage('homePage');
+    document.getElementById('loginName').textContent = `登入人員：${state.user.display_name}`;
+    document.getElementById('loginRole').textContent = `角色：${state.user.role}`;
+  }
+
+  async function api(action, payload = {}){
+    if(!API_URL || API_URL.includes('貼你的')){
+      throw new Error('API_URL_NOT_SET');
+    }
+
+    const res = await fetch(API_URL, {
+      method:'POST',
+      mode:'cors',
+      headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action, ...payload })
     });
 
-    const hasData = dates.some(date => item.days[date].count > 0);
+    const json = await res.json();
 
-    if (hasData) result.projects.push(item);
-  });
+    if(!json.ok){
+      throw new Error(json.error || 'API_ERROR');
+    }
 
-  return result;
-}
+    return json.data;
+  }
 
-function getStats(params) {
-  requireAdmin(params.token);
+  function showMsg(type, text){
+    const box = document.getElementById('globalMsg');
+    box.className = `msg show ${type}`;
+    box.textContent = text;
+  }
 
-  const rows = readRows(CONFIG.SHEETS.ACTUAL)
-    .filter(r => clean(r.status).toLowerCase() === 'active');
+  function clearMsg(){
+    const box = document.getElementById('globalMsg');
+    box.className = 'msg';
+    box.textContent = '';
+  }
 
-  const today = clean(params.base_date)
-    ? parseDateOnly(dateKey(params.base_date))
-    : new Date();
+  function setBusy(btnId, busy, text){
+    const btn = document.getElementById(btnId);
+    if(!btn) return;
 
-  const weekStart = getMonday(today);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekEnd.getDate() + 6);
+    if(busy){
+      btn.dataset.oldText = btn.textContent;
+      btn.textContent = text || '處理中...';
+      btn.disabled = true;
+    }else{
+      btn.textContent = btn.dataset.oldText || btn.textContent;
+    }
+  }
 
-  const year = today.getFullYear();
-  const month = today.getMonth();
+  async function login(){
+    clearMsg();
 
-  const weekly = rows.filter(r => {
-    const d = parseDateOnly(dateKey(r.work_date));
-    return d >= weekStart && d <= weekEnd;
-  });
+    const username = value('loginUsername');
+    const password = value('loginPassword');
 
-  const monthly = rows.filter(r => {
-    const d = parseDateOnly(dateKey(r.work_date));
-    return d.getFullYear() === year && d.getMonth() === month;
-  });
+    if(!username || !password){
+      showMsg('err','請輸入帳號與密碼。');
+      return;
+    }
 
-  const yearly = rows.filter(r => {
-    const d = parseDateOnly(dateKey(r.work_date));
-    return d.getFullYear() === year;
-  });
+    try{
+      setBusy('loginBtn', true, '登入中...');
+      const data = await api('login',{ username, password });
 
-  return {
-    weekly: makeStat(weekly),
-    monthly: makeStat(monthly),
-    yearly: makeStat(yearly)
-  };
-}
+      state.token = data.token;
+      state.user = data.user;
 
-function makeStat(rows) {
-  return {
-    count: rows.length,
-    hours: sum(rows.map(r => Number(r.work_hours || 0)))
-  };
-}
+      localStorage.setItem('dispatch_token', state.token);
+      localStorage.setItem('dispatch_user', JSON.stringify(state.user));
 
-function getProjectSummary(params) {
-  requireAdmin(params.token);
+      showLoggedIn();
+      await loadMasterData();
+    }catch(err){
+      showMsg('err', errorText(err.message));
+    }finally{
+      setBusy('loginBtn', false);
+      document.getElementById('loginBtn').disabled = false;
+    }
+  }
 
-  const mode = clean(params.mode) || 'week';
-  const baseDate = clean(params.base_date)
-    ? parseDateOnly(dateKey(params.base_date))
-    : new Date();
+  function logout(){
+    localStorage.removeItem('dispatch_token');
+    localStorage.removeItem('dispatch_user');
+    state.token = '';
+    state.user = null;
+    openPage('loginPage');
+  }
 
-  const range = getRangeByMode(mode, baseDate);
+  async function loadMasterData(){
+    try{
+      const data = await api('getMasterData',{ token:state.token });
+      state.projects = data.projects || [];
+      state.vehicles = data.vehicles || [];
+      state.users = data.users || [];
+      fillMasterSelects();
+    }catch(err){
+      showMsg('err', errorText(err.message));
+    }
+  }
 
-  const rows = readRows(CONFIG.SHEETS.ACTUAL)
-    .filter(r => {
-      if (clean(r.status).toLowerCase() !== 'active') return false;
-      const d = parseDateOnly(dateKey(r.work_date));
-      return d >= range.startDate && d <= range.endDate;
+  function fillMasterSelects(){
+    fillUserSelect('preUser', false);
+    fillUserSelect('actualSearchUser', true);
+    fillUserSelect('editUser', false);
+
+    fillProjectSelect('preProject', false);
+    fillProjectSelect('actualSearchProject', true);
+    fillProjectSelect('editProject', false);
+
+    fillVehicleSelect('preVehicle');
+    fillVehicleSelect('editVehicle');
+
+    updateHours('pre');
+    updateHours('edit');
+    validatePreForm();
+    validateEditForm();
+  }
+
+  function fillUserSelect(id, allowAll){
+    const el = document.getElementById(id);
+    if(!el) return;
+
+    el.innerHTML = allowAll ? '<option value="">全部人員</option>' : '<option value="">請選擇人員</option>';
+
+    state.users
+      .filter(u => u.role !== 'Admin')
+      .forEach(u=>{
+        const opt = document.createElement('option');
+        opt.value = u.user_id;
+        opt.textContent = `${u.display_name}｜${u.department || ''}`;
+        el.appendChild(opt);
+      });
+  }
+
+  function fillProjectSelect(id, allowAll){
+    const el = document.getElementById(id);
+    if(!el) return;
+
+    el.innerHTML = allowAll ? '<option value="">全部案場</option>' : '<option value="">請選擇案場</option>';
+
+    state.projects.forEach(p=>{
+      const opt = document.createElement('option');
+      opt.value = p.project_id;
+      opt.textContent = `${p.project_id}｜${p.project_short_name}`;
+      el.appendChild(opt);
+    });
+  }
+
+  function fillVehicleSelect(id){
+    const el = document.getElementById(id);
+    if(!el) return;
+
+    el.innerHTML = '';
+    addOption(el,'','請選擇車輛');
+    addOption(el,'NO_CAR','不使用車輛');
+    addOption(el,'TEMP','其他車輛／臨時車號');
+
+    state.vehicles.forEach(v=>{
+      addOption(el, v.vehicle_id, `${v.plate_no}｜${v.vehicle_name}`);
+    });
+  }
+
+  function addOption(el,value,text){
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = text;
+    el.appendChild(opt);
+  }
+
+  function fillTimeOptions(){
+    const ids = ['preStart','preEnd','editStart','editEnd'];
+    const times = [];
+
+    for(let h=6; h<=22; h++){
+      times.push(`${pad(h)}:00`);
+      times.push(`${pad(h)}:30`);
+    }
+
+    ids.forEach(id=>{
+      const el = document.getElementById(id);
+      if(!el) return;
+
+      el.innerHTML = '<option value="">請選擇</option>';
+      times.forEach(t=>addOption(el,t,t));
     });
 
-  const projectMap = {};
+    document.getElementById('preStart').value = '08:30';
+    document.getElementById('preEnd').value = '17:30';
+    document.getElementById('editStart').value = '08:30';
+    document.getElementById('editEnd').value = '17:30';
+  }
 
-  rows.forEach(r => {
-    const pid = clean(r.project_id);
-    const pname = clean(r.project_short_name);
-    const uid = clean(r.user_id);
-    const uname = clean(r.display_name);
+  function toggleTempVehicle(type){
+    const vehicle = value(`${type}Vehicle`);
+    const box = document.getElementById(`${type}TempVehicleBox`);
+    if(!box) return;
 
-    if (!projectMap[pid]) {
-      projectMap[pid] = {
-        project_id: pid,
-        project_short_name: pname,
-        count: 0,
-        hours: 0,
-        users: {}
-      };
-    }
+    box.classList.toggle('hide', vehicle !== 'TEMP');
+  }
 
-    projectMap[pid].count += 1;
-    projectMap[pid].hours += Number(r.work_hours || 0);
+  function calcHours(start,end){
+    if(!start || !end) return { gross:0, lunch:0, net:0, valid:false };
 
-    if (!projectMap[pid].users[uid]) {
-      projectMap[pid].users[uid] = {
-        user_id: uid,
-        display_name: uname,
-        count: 0,
-        hours: 0,
-        dates: []
-      };
-    }
+    const s = toMinutes(start);
+    const e = toMinutes(end);
 
-    projectMap[pid].users[uid].count += 1;
-    projectMap[pid].users[uid].hours += Number(r.work_hours || 0);
+    if(e <= s) return { gross:0, lunch:0, net:0, valid:false };
 
-    const dkey = dateKey(r.work_date);
-    if (!projectMap[pid].users[uid].dates.includes(dkey)) {
-      projectMap[pid].users[uid].dates.push(dkey);
-    }
-  });
-
-  const projects = Object.values(projectMap).map(p => {
-    const users = Object.values(p.users).map(u => ({
-      user_id: u.user_id,
-      display_name: u.display_name,
-      count: u.count,
-      hours: Math.round(u.hours * 10) / 10,
-      dates: u.dates.sort()
-    }));
+    const lunchStart = toMinutes('12:00');
+    const lunchEnd = toMinutes('13:00');
+    const gross = (e - s) / 60;
+    const lunch = Math.max(0, Math.min(e,lunchEnd) - Math.max(s,lunchStart)) / 60;
+    const net = gross - lunch;
 
     return {
-      project_id: p.project_id,
-      project_short_name: p.project_short_name,
-      count: p.count,
-      people_count: users.length,
-      hours: Math.round(p.hours * 10) / 10,
-      users: users.sort((a, b) => b.hours - a.hours)
+      gross: round1(gross),
+      lunch: round1(lunch),
+      net: round1(net),
+      valid: true
     };
-  });
+  }
 
-  projects.sort((a, b) => b.hours - a.hours);
+  function updateHours(type){
+    const h = calcHours(value(`${type}Start`), value(`${type}End`));
+    setText(`${type}Gross`, h.gross.toFixed(1));
+    setText(`${type}Lunch`, h.lunch.toFixed(1));
+    setText(`${type}Net`, h.net.toFixed(1));
+  }
 
-  return {
-    mode: mode,
-    start_date: formatDateOnly(range.startDate),
-    end_date: formatDateOnly(range.endDate),
-    projects: projects
-  };
-}
+  function validatePreForm(){
+    const vehicle = value('preVehicle');
+    const h = calcHours(value('preStart'), value('preEnd'));
 
-function getPersonSummary(params) {
-  requireAdmin(params.token);
+    const ok =
+      value('preDate') &&
+      value('preUser') &&
+      value('preProject') &&
+      vehicle &&
+      (vehicle !== 'TEMP' || value('preTempPlateNo')) &&
+      value('preStart') &&
+      value('preEnd') &&
+      h.valid &&
+      value('preWorkType') &&
+      value('preNote');
 
-  const mode = clean(params.mode) || 'week';
-  const baseDate = clean(params.base_date)
-    ? parseDateOnly(dateKey(params.base_date))
-    : new Date();
+    document.getElementById('savePreBtn').disabled = !ok;
+    return !!ok;
+  }
 
-  const range = getRangeByMode(mode, baseDate);
+  function validateEditForm(){
+    const btn = document.getElementById('saveEditBtn');
+    if(!btn) return false;
 
-  const rows = readRows(CONFIG.SHEETS.ACTUAL)
-    .filter(r => {
-      if (clean(r.status).toLowerCase() !== 'active') return false;
-      const d = parseDateOnly(dateKey(r.work_date));
-      return d >= range.startDate && d <= range.endDate;
+    const vehicle = value('editVehicle');
+    const h = calcHours(value('editStart'), value('editEnd'));
+
+    const ok =
+      value('editRecordId') &&
+      value('editUser') &&
+      value('editDate') &&
+      value('editProject') &&
+      vehicle &&
+      (vehicle !== 'TEMP' || value('editTempPlateNo')) &&
+      value('editStart') &&
+      value('editEnd') &&
+      h.valid &&
+      value('editWorkType') &&
+      value('editNote');
+
+    btn.disabled = !ok;
+    return !!ok;
+  }
+
+  function openPrePage(){
+    openPage('prePage');
+    updateHours('pre');
+    validatePreForm();
+  }
+
+  async function savePreSchedule(){
+    clearMsg();
+
+    if(!validatePreForm()){
+      showMsg('err','資料尚未填寫完整，請確認人員、日期、案場、車輛、時間、類型與內容。');
+      return;
+    }
+
+    try{
+      setBusy('savePreBtn', true, '儲存中...');
+      await api('savePreSchedule',{
+        token: state.token,
+        user_id: value('preUser'),
+        work_date: value('preDate'),
+        project_id: value('preProject'),
+        vehicle_id: value('preVehicle'),
+        temp_plate_no: value('preTempPlateNo'),
+        start_time: value('preStart'),
+        end_time: value('preEnd'),
+        work_type: value('preWorkType'),
+        work_note: value('preNote')
+      });
+
+      showMsg('ok','預排已儲存，並已同步到實際填報。');
+      document.getElementById('preNote').value = '';
+      validatePreForm();
+    }catch(err){
+      showMsg('err', errorText(err.message));
+    }finally{
+      setBusy('savePreBtn', false);
+      validatePreForm();
+    }
+  }
+
+  function openActualPage(){
+    openPage('actualPage');
+    loadActualRecords();
+  }
+
+  async function loadActualRecords(){
+    clearMsg();
+
+    try{
+      const rows = await api('getActualRecords',{
+        token: state.token,
+        work_date: value('actualSearchDate'),
+        user_id: value('actualSearchUser'),
+        project_id: value('actualSearchProject')
+      });
+
+      renderActualList(rows);
+    }catch(err){
+      showMsg('err', errorText(err.message));
+    }
+  }
+
+  function renderActualList(rows){
+    document.getElementById('actualListCard').classList.remove('hide');
+
+    const box = document.getElementById('actualList');
+
+    if(!rows.length){
+      box.innerHTML = '<div class="small">目前查無實際填報資料。</div>';
+      return;
+    }
+
+    box.innerHTML = rows.map(r=>`
+      <div class="record">
+        <b>${escapeHtml(r.work_date)}｜${escapeHtml(r.project_id)} ${escapeHtml(r.project_short_name)}</b>
+        <div>${escapeHtml(r.display_name)}｜${escapeHtml(r.start_time)}-${escapeHtml(r.end_time)}｜${escapeHtml(r.work_hours)} 小時</div>
+        <div>車輛：${escapeHtml(r.plate_no || '')}</div>
+        <div>工作：${escapeHtml(r.work_type || '')}</div>
+        <div class="small">來源：${escapeHtml(r.source_type || '')}</div>
+        <button class="btn-secondary" style="margin-top:10px" onclick='openActualEdit(${JSON.stringify(r)})'>編輯實際</button>
+      </div>
+    `).join('');
+  }
+
+  function openActualEdit(r){
+    document.getElementById('actualEditCard').classList.remove('hide');
+
+    setValue('editRecordId', r.record_id);
+    setValue('editUser', r.user_id);
+    setValue('editDate', dateKey(r.work_date));
+    setValue('editProject', r.project_id);
+    setValue('editVehicle', r.vehicle_id);
+    setValue('editStart', r.start_time);
+    setValue('editEnd', r.end_time);
+    setValue('editWorkType', r.work_type);
+    setValue('editNote', r.work_note);
+    setValue('editReason', r.change_reason || '');
+
+    if(r.vehicle_id === 'TEMP'){
+      setValue('editTempPlateNo', r.plate_no);
+    }else{
+      setValue('editTempPlateNo', '');
+    }
+
+    toggleTempVehicle('edit');
+    updateHours('edit');
+    validateEditForm();
+
+    document.getElementById('actualEditCard').scrollIntoView({behavior:'smooth'});
+  }
+
+  function closeActualEdit(){
+    document.getElementById('actualEditCard').classList.add('hide');
+  }
+
+  async function updateActualRecord(){
+    clearMsg();
+
+    if(!validateEditForm()){
+      showMsg('err','實際填報資料尚未完整。');
+      return;
+    }
+
+    try{
+      setBusy('saveEditBtn', true, '儲存中...');
+      await api('updateActualRecord',{
+        token: state.token,
+        record_id: value('editRecordId'),
+        user_id: value('editUser'),
+        work_date: value('editDate'),
+        project_id: value('editProject'),
+        vehicle_id: value('editVehicle'),
+        temp_plate_no: value('editTempPlateNo'),
+        start_time: value('editStart'),
+        end_time: value('editEnd'),
+        work_type: value('editWorkType'),
+        work_note: value('editNote'),
+        change_reason: value('editReason')
+      });
+
+      showMsg('ok','實際填報已更新。');
+      closeActualEdit();
+      await loadActualRecords();
+    }catch(err){
+      showMsg('err', errorText(err.message));
+    }finally{
+      setBusy('saveEditBtn', false);
+      validateEditForm();
+    }
+  }
+
+  async function openDashboard(){
+    openPage('dashboardPage');
+    await Promise.all([
+      loadStats(),
+      loadWeeklyOverview(),
+      loadProjectSummary(),
+      loadPersonSummary()
+    ]);
+  }
+
+  function showDashboardTab(tab){
+    document.getElementById('boardPanel').classList.toggle('hide', tab !== 'board');
+    document.getElementById('projectPanelDash').classList.toggle('hide', tab !== 'project');
+    document.getElementById('personPanelDash').classList.toggle('hide', tab !== 'person');
+
+    document.getElementById('dashBoardTab').classList.toggle('active', tab === 'board');
+    document.getElementById('dashProjectTab').classList.toggle('active', tab === 'project');
+    document.getElementById('dashPersonTab').classList.toggle('active', tab === 'person');
+  }
+
+  async function loadStats(){
+    try{
+      const data = await api('getStats',{
+        token: state.token,
+        base_date: formatDate(new Date())
+      });
+
+      setText('weekCount', data.weekly.count);
+      setText('weekHours', data.weekly.hours);
+      setText('monthCount', data.monthly.count);
+      setText('monthHours', data.monthly.hours);
+      setText('yearCount', data.yearly.count);
+      setText('yearHours', data.yearly.hours);
+    }catch(err){
+      showMsg('err', errorText(err.message));
+    }
+  }
+
+  function setDashSource(source){
+    state.dashSource = source;
+    document.getElementById('dashActualBtn').classList.toggle('active', source === 'actual');
+    document.getElementById('dashPreBtn').classList.toggle('active', source === 'pre');
+    loadWeeklyOverview();
+  }
+
+  function changeWeek(days){
+    const d = parseDate(state.currentWeekStart);
+    d.setDate(d.getDate() + days);
+    state.currentWeekStart = formatDate(d);
+    loadWeeklyOverview();
+  }
+
+  async function loadWeeklyOverview(){
+    try{
+      const data = await api('getWeeklyOverview',{
+        token: state.token,
+        week_start: state.currentWeekStart,
+        source: state.dashSource
+      });
+
+      renderWeekTable(data);
+    }catch(err){
+      showMsg('err', errorText(err.message));
+    }
+  }
+
+  function renderWeekTable(data){
+    setText('weekTitle', `週排程表｜${data.week_start} ～ ${data.week_end}`);
+
+    const days = ['週一','週二','週三','週四','週五','週六','週日'];
+
+    let html = '<table><thead><tr>';
+    html += '<th class="project-cell">案場</th>';
+
+    data.dates.forEach((date,i)=>{
+      html += `<th>${days[i]}<br>${date.slice(5)}</th>`;
     });
 
-  const personMap = {};
+    html += '</tr></thead><tbody>';
 
-  rows.forEach(r => {
-    const uid = clean(r.user_id);
-    const uname = clean(r.display_name);
-    const pid = clean(r.project_id);
-    const pname = clean(r.project_short_name);
-    const dkey = dateKey(r.work_date);
+    if(!data.projects.length){
+      html += '<tr><td colspan="8">目前此週尚無資料。</td></tr>';
+    }else{
+      data.projects.forEach(p=>{
+        html += '<tr>';
+        html += `<td class="project-cell">${escapeHtml(p.project_id)}<br><span class="small">${escapeHtml(p.project_short_name)}</span></td>`;
 
-    if (!personMap[uid]) {
-      personMap[uid] = {
-        user_id: uid,
-        display_name: uname,
-        count: 0,
-        hours: 0,
-        projects: {},
-        records: []
-      };
+        data.dates.forEach(date=>{
+          const cell = p.days[date];
+          const chips = cell.records.map(r=>`<span class="person-chip">${escapeHtml(r.display_name)}</span>`).join('');
+
+          html += `
+            <td class="day-cell" onclick='showDetail(${JSON.stringify(date)},${JSON.stringify(p.project_id)})'>
+              ${chips || '<span class="small">—</span>'}
+              ${cell.count ? `<div class="small">${cell.count}人次｜${cell.hours}hr</div>` : ''}
+            </td>
+          `;
+        });
+
+        html += '</tr>';
+      });
     }
 
-    personMap[uid].count += 1;
-    personMap[uid].hours += Number(r.work_hours || 0);
+    html += '</tbody></table>';
 
-    if (!personMap[uid].projects[pid]) {
-      personMap[uid].projects[pid] = {
-        project_id: pid,
-        project_short_name: pname
-      };
+    document.getElementById('weekTableWrap').innerHTML = html;
+    window.__weekData = data;
+  }
+
+  function showDetail(date, projectId){
+    const data = window.__weekData;
+    if(!data) return;
+
+    const project = data.projects.find(p=>p.project_id === projectId);
+    if(!project) return;
+
+    const records = project.days[date].records || [];
+
+    document.getElementById('detailCard').classList.remove('hide');
+    setText('detailTitle', `${date}｜${project.project_id} ${project.project_short_name}`);
+
+    const box = document.getElementById('detailContent');
+
+    if(!records.length){
+      box.innerHTML = '<div class="small">此格目前無資料。</div>';
+      return;
     }
 
-    personMap[uid].records.push({
-      record_id: clean(r.record_id),
-      work_date: dkey,
-      project_id: pid,
-      project_short_name: pname,
-      plate_no: clean(r.plate_no),
-      start_time: clean(r.start_time),
-      end_time: clean(r.end_time),
-      work_hours: Number(r.work_hours || 0),
-      work_type: clean(r.work_type),
-      work_note: clean(r.work_note)
-    });
-  });
-
-  const people = Object.values(personMap).map(p => ({
-    user_id: p.user_id,
-    display_name: p.display_name,
-    count: p.count,
-    hours: Math.round(p.hours * 10) / 10,
-    project_count: Object.keys(p.projects).length,
-    projects: Object.values(p.projects),
-    records: p.records.sort((a, b) => a.work_date.localeCompare(b.work_date))
-  }));
-
-  people.sort((a, b) => b.hours - a.hours);
-
-  return {
-    mode: mode,
-    start_date: formatDateOnly(range.startDate),
-    end_date: formatDateOnly(range.endDate),
-    people: people
-  };
-}
-
-function getRangeByMode(mode, baseDate) {
-  let startDate;
-  let endDate;
-
-  if (mode === 'month') {
-    startDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
-    endDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 0);
-  } else if (mode === 'year') {
-    startDate = new Date(baseDate.getFullYear(), 0, 1);
-    endDate = new Date(baseDate.getFullYear(), 11, 31);
-  } else {
-    startDate = getMonday(baseDate);
-    endDate = new Date(startDate);
-    endDate.setDate(endDate.getDate() + 6);
+    box.innerHTML = records.map(r=>`
+      <div class="record">
+        <b>${escapeHtml(r.display_name)}</b>
+        <div>${escapeHtml(r.start_time)} - ${escapeHtml(r.end_time)}｜${escapeHtml(r.work_hours)} 小時｜${escapeHtml(r.work_type)}</div>
+        <div>車號：${escapeHtml(r.plate_no || '')}</div>
+        <div class="small">${escapeHtml(r.work_note || '')}</div>
+      </div>
+    `).join('');
   }
 
-  startDate.setHours(0, 0, 0, 0);
-  endDate.setHours(23, 59, 59, 999);
-
-  return {
-    startDate: startDate,
-    endDate: endDate
-  };
-}
-
-function adminAddUser(params) {
-  requireAdmin(params.token);
-
-  requireFields(params, [
-    'username',
-    'password',
-    'display_name',
-    'role',
-    'department'
-  ]);
-
-  const username = clean(params.username);
-  const users = readRows(CONFIG.SHEETS.USERS);
-
-  if (users.some(u => clean(u.username) === username)) {
-    throw new Error('USERNAME_EXISTS');
+  function hideDetail(){
+    document.getElementById('detailCard').classList.add('hide');
   }
 
-  const role = clean(params.role);
+  function setProjectSummaryMode(mode){
+    state.projectSummaryMode = mode;
 
-  if (!['User', 'Admin'].includes(role)) {
-    throw new Error('INVALID_ROLE');
+    document.getElementById('projectWeekBtn').classList.toggle('active', mode === 'week');
+    document.getElementById('projectMonthBtn').classList.toggle('active', mode === 'month');
+    document.getElementById('projectYearBtn').classList.toggle('active', mode === 'year');
+
+    loadProjectSummary();
   }
 
-  const obj = {
-    user_id: makeNextCode('U', users, 'user_id'),
-    username: username,
-    password: clean(params.password),
-    display_name: clean(params.display_name),
-    role: role,
-    department: clean(params.department),
-    status: 'active',
-    created_at: nowText(),
-    token: '',
-    last_login_at: ''
-  };
+  async function loadProjectSummary(){
+    try{
+      const data = await api('getProjectSummary',{
+        token: state.token,
+        mode: state.projectSummaryMode,
+        base_date: formatDate(new Date())
+      });
 
-  return appendRow(CONFIG.SHEETS.USERS, obj);
-}
-
-function adminAddMember(params) {
-  requireAdmin(params.token);
-
-  requireFields(params, [
-    'display_name',
-    'department'
-  ]);
-
-  const users = readRows(CONFIG.SHEETS.USERS);
-  const userId = makeNextCode('U', users, 'user_id');
-
-  const obj = {
-    user_id: userId,
-    username: '',
-    password: '',
-    display_name: clean(params.display_name),
-    role: 'User',
-    department: clean(params.department),
-    status: 'active',
-    created_at: nowText(),
-    token: '',
-    last_login_at: ''
-  };
-
-  return appendRow(CONFIG.SHEETS.USERS, obj);
-}
-
-function adminAddProject(params) {
-  const admin = requireAdmin(params.token);
-
-  requireFields(params, [
-    'project_short_name',
-    'project_full_name',
-    'location'
-  ]);
-
-  const projects = readRows(CONFIG.SHEETS.PROJECTS);
-
-  const obj = {
-    project_id: makeNextCode('A', projects, 'project_id'),
-    project_short_name: clean(params.project_short_name),
-    project_full_name: clean(params.project_full_name),
-    location: clean(params.location),
-    status: 'active',
-    created_by: clean(admin.username),
-    created_at: nowText()
-  };
-
-  return appendRow(CONFIG.SHEETS.PROJECTS, obj);
-}
-
-function adminAddVehicle(params) {
-  requireAdmin(params.token);
-
-  requireFields(params, [
-    'plate_no',
-    'vehicle_name',
-    'vehicle_type'
-  ]);
-
-  const vehicles = readRows(CONFIG.SHEETS.VEHICLES);
-
-  const obj = {
-    vehicle_id: makeNextCode('V', vehicles, 'vehicle_id'),
-    plate_no: clean(params.plate_no),
-    vehicle_name: clean(params.vehicle_name),
-    vehicle_type: clean(params.vehicle_type),
-    status: 'active',
-    created_at: nowText()
-  };
-
-  return appendRow(CONFIG.SHEETS.VEHICLES, obj);
-}
-
-function adminUpdateStatus(params) {
-  requireAdmin(params.token);
-
-  requireFields(params, [
-    'target',
-    'id',
-    'status'
-  ]);
-
-  const map = {
-    user: {
-      sheet: CONFIG.SHEETS.USERS,
-      key: 'user_id'
-    },
-    project: {
-      sheet: CONFIG.SHEETS.PROJECTS,
-      key: 'project_id'
-    },
-    vehicle: {
-      sheet: CONFIG.SHEETS.VEHICLES,
-      key: 'vehicle_id'
-    },
-    pre: {
-      sheet: CONFIG.SHEETS.PRE,
-      key: 'record_id'
-    },
-    actual: {
-      sheet: CONFIG.SHEETS.ACTUAL,
-      key: 'record_id'
+      renderProjectSummary(data);
+    }catch(err){
+      showMsg('err', errorText(err.message));
     }
-  };
-
-  const target = map[clean(params.target)];
-
-  if (!target) throw new Error('INVALID_TARGET');
-
-  const status = clean(params.status).toLowerCase();
-
-  if (!['active', 'disabled', 'deleted'].includes(status)) {
-    throw new Error('INVALID_STATUS');
   }
 
-  const count = updateRows(
-    target.sheet,
-    row => clean(row[target.key]) === clean(params.id),
-    row => ({
-      ...row,
-      status: status,
-      updated_at: nowText()
-    })
-  );
+  function renderProjectSummary(data){
+    const el = document.getElementById('projectSummary');
 
-  if (count === 0) throw new Error('NOT_FOUND');
+    if(!data.projects.length){
+      el.innerHTML = '<div class="small">尚無資料。</div>';
+      return;
+    }
 
-  return {
-    updated: count
-  };
-}
-
-function adminGetRecords(params) {
-  requireAdmin(params.token);
-
-  requireFields(params, ['target']);
-
-  const map = {
-    users: CONFIG.SHEETS.USERS,
-    projects: CONFIG.SHEETS.PROJECTS,
-    vehicles: CONFIG.SHEETS.VEHICLES,
-    pre: CONFIG.SHEETS.PRE,
-    actual: CONFIG.SHEETS.ACTUAL
-  };
-
-  const sheetName = map[clean(params.target)];
-
-  if (!sheetName) throw new Error('INVALID_TARGET');
-
-  return readRows(sheetName);
-}
-
-function calculateNetHours(start, end) {
-  const s = parseTimeToMinutes(start);
-  const e = parseTimeToMinutes(end);
-
-  if (e <= s) throw new Error('INVALID_TIME_RANGE');
-
-  if (s % CONFIG.TIME_STEP_MINUTES !== 0 || e % CONFIG.TIME_STEP_MINUTES !== 0) {
-    throw new Error('INVALID_TIME_STEP');
+    el.innerHTML = data.projects.map(p=>`
+      <div class="summary-block">
+        <div class="summary-title">${escapeHtml(p.project_id)}｜${escapeHtml(p.project_short_name)}</div>
+        <div class="summary-meta">
+          期間：${escapeHtml(data.start_date)} ～ ${escapeHtml(data.end_date)}<br>
+          出工人次：${p.count}｜出工人數：${p.people_count}｜總工時：${p.hours}
+        </div>
+        <table class="mini-table">
+          <thead><tr><th>人員</th><th>人次</th><th>工時</th><th>日期</th></tr></thead>
+          <tbody>
+            ${p.users.map(u=>`
+              <tr>
+                <td>${escapeHtml(u.display_name)}</td>
+                <td>${u.count}</td>
+                <td>${u.hours}</td>
+                <td>${u.dates.map(d=>d.slice(5)).join(', ')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `).join('');
   }
 
-  const lunchStart = parseTimeToMinutes(CONFIG.LUNCH_START);
-  const lunchEnd = parseTimeToMinutes(CONFIG.LUNCH_END);
+  function setPersonSummaryMode(mode){
+    state.personSummaryMode = mode;
 
-  const gross = (e - s) / 60;
-  const lunchOverlap = Math.max(0, Math.min(e, lunchEnd) - Math.max(s, lunchStart)) / 60;
-  const net = gross - lunchOverlap;
+    document.getElementById('personWeekBtn').classList.toggle('active', mode === 'week');
+    document.getElementById('personMonthBtn').classList.toggle('active', mode === 'month');
+    document.getElementById('personYearBtn').classList.toggle('active', mode === 'year');
 
-  if ((net * 10) % 5 !== 0) {
-    throw new Error('INVALID_HOUR_DECIMAL');
+    loadPersonSummary();
   }
 
-  return {
-    gross_hours: Math.round(gross * 10) / 10,
-    lunch_deduction: Math.round(lunchOverlap * 10) / 10,
-    net_hours: Math.round(net * 10) / 10
-  };
-}
+  async function loadPersonSummary(){
+    try{
+      const data = await api('getPersonSummary',{
+        token: state.token,
+        mode: state.personSummaryMode,
+        base_date: formatDate(new Date())
+      });
 
-function parseTimeToMinutes(text) {
-  const value = clean(text);
-  const parts = value.split(':');
-
-  if (parts.length !== 2) throw new Error('INVALID_TIME_FORMAT');
-
-  const h = Number(parts[0]);
-  const m = Number(parts[1]);
-
-  if (isNaN(h) || isNaN(m)) throw new Error('INVALID_TIME_NUMBER');
-  if (h < 0 || h > 23 || m < 0 || m > 59) throw new Error('INVALID_TIME_VALUE');
-
-  return h * 60 + m;
-}
-
-function parseDateOnly(text) {
-  const value = dateKey(text);
-  const parts = value.split('-').map(Number);
-
-  if (parts.length !== 3) throw new Error('INVALID_DATE_FORMAT');
-
-  const y = parts[0];
-  const m = parts[1];
-  const d = parts[2];
-
-  if (!y || !m || !d || isNaN(y) || isNaN(m) || isNaN(d)) {
-    throw new Error('INVALID_DATE_VALUE');
+      renderPersonSummary(data);
+    }catch(err){
+      showMsg('err', errorText(err.message));
+    }
   }
 
-  return new Date(y, m - 1, d);
-}
+  function renderPersonSummary(data){
+    const el = document.getElementById('personSummary');
 
-function formatDateOnly(date) {
-  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-}
+    if(!data.people.length){
+      el.innerHTML = '<div class="small">尚無資料。</div>';
+      return;
+    }
 
-function getMonday(date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
+    el.innerHTML = data.people.map(p=>`
+      <div class="summary-block">
+        <div class="summary-title">${escapeHtml(p.display_name)}</div>
+        <div class="summary-meta">
+          期間：${escapeHtml(data.start_date)} ～ ${escapeHtml(data.end_date)}<br>
+          出工次數：${p.count}｜總工時：${p.hours}｜涉及案場：${p.project_count}
+        </div>
+        <div>
+          ${p.projects.map(x=>`<span class="pill">${escapeHtml(x.project_id)} ${escapeHtml(x.project_short_name)}</span>`).join('')}
+        </div>
+        <div class="divider"></div>
+        <table class="mini-table">
+          <thead><tr><th>日期</th><th>案場</th><th>車號</th><th>時間</th><th>工時</th></tr></thead>
+          <tbody>
+            ${p.records.map(r=>`
+              <tr>
+                <td>${escapeHtml(r.work_date.slice(5))}</td>
+                <td>${escapeHtml(r.project_id)} ${escapeHtml(r.project_short_name)}</td>
+                <td>${escapeHtml(r.plate_no || '')}</td>
+                <td>${escapeHtml(r.start_time)}-${escapeHtml(r.end_time)}</td>
+                <td>${r.work_hours}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `).join('');
+  }
 
-  d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
+  function openAdmin(){
+    openPage('adminPage');
+  }
 
-  return d;
-}
+  function showAdminPanel(id){
+    document.querySelectorAll('.admin-panel').forEach(x=>x.classList.add('hide'));
+    document.getElementById(id).classList.remove('hide');
+  }
 
-function getWeekKey(dateText) {
-  const d = parseDateOnly(dateText);
-  const monday = getMonday(d);
-  return formatDateOnly(monday);
-}
+  function showAdminPanelFromPre(id){
+    openAdmin();
+    showAdminPanel(id);
+  }
 
-function sum(arr) {
-  const total = arr.reduce((a, b) => a + Number(b || 0), 0);
-  return Math.round(total * 10) / 10;
-}
+  async function adminAddMember(){
+    try{
+      await api('adminAddMember',{
+        token:state.token,
+        display_name:value('newMemberName'),
+        department:value('newMemberDept')
+      });
 
-function debugUsers() {
-  const users = readRows(CONFIG.SHEETS.USERS);
-  Logger.log(JSON.stringify(users, null, 2));
-  return users;
-}
+      showMsg('ok','人員已新增。');
+      clearAdminInputs();
+      await loadMasterData();
+    }catch(err){
+      showMsg('err', errorText(err.message));
+    }
+  }
+
+  async function adminAddProject(){
+    try{
+      await api('adminAddProject',{
+        token:state.token,
+        project_short_name:value('newProjectShort'),
+        project_full_name:value('newProjectFull'),
+        location:value('newProjectLocation')
+      });
+
+      showMsg('ok','案場已新增。');
+      clearAdminInputs();
+      await loadMasterData();
+    }catch(err){
+      showMsg('err', errorText(err.message));
+    }
+  }
+
+  async function adminAddVehicle(){
+    try{
+      await api('adminAddVehicle',{
+        token:state.token,
+        plate_no:value('newPlateNo'),
+        vehicle_name:value('newVehicleName'),
+        vehicle_type:value('newVehicleType')
+      });
+
+      showMsg('ok','車輛已新增。');
+      clearAdminInputs();
+      await loadMasterData();
+    }catch(err){
+      showMsg('err', errorText(err.message));
+    }
+  }
+
+  async function adminAddUser(){
+    try{
+      await api('adminAddUser',{
+        token:state.token,
+        username:value('newAdminUsername'),
+        password:value('newAdminPassword'),
+        display_name:value('newAdminName'),
+        role:'Admin',
+        department:value('newAdminDept')
+      });
+
+      showMsg('ok','管理帳號已新增。');
+      clearAdminInputs();
+      await loadMasterData();
+    }catch(err){
+      showMsg('err', errorText(err.message));
+    }
+  }
+
+  function clearAdminInputs(){
+    [
+      'newMemberName','newMemberDept',
+      'newProjectShort','newProjectFull','newProjectLocation',
+      'newPlateNo','newVehicleName','newVehicleType',
+      'newAdminUsername','newAdminPassword','newAdminName','newAdminDept'
+    ].forEach(id=>setValue(id,''));
+  }
+
+  function value(id){
+    const el = document.getElementById(id);
+    return el ? String(el.value || '').trim() : '';
+  }
+
+  function setValue(id,v){
+    const el = document.getElementById(id);
+    if(el) el.value = v || '';
+  }
+
+  function setText(id,v){
+    const el = document.getElementById(id);
+    if(el) el.textContent = v;
+  }
+
+  function toMinutes(t){
+    const [h,m] = t.split(':').map(Number);
+    return h * 60 + m;
+  }
+
+  function round1(n){
+    return Math.round(n * 10) / 10;
+  }
+
+  function formatDate(d){
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+
+  function parseDate(s){
+    const [y,m,d] = s.split('-').map(Number);
+    return new Date(y,m-1,d);
+  }
+
+  function getMondayString(date){
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    return formatDate(d);
+  }
+
+  function dateKey(s){
+    return String(s || '').replaceAll('/','-').slice(0,10);
+  }
+
+  function pad(n){
+    return String(n).padStart(2,'0');
+  }
+
+  function escapeHtml(str){
+    return String(str ?? '')
+      .replaceAll('&','&amp;')
+      .replaceAll('<','&lt;')
+      .replaceAll('>','&gt;')
+      .replaceAll('"','&quot;')
+      .replaceAll("'","&#039;");
+  }
+
+  function errorText(code){
+    const map = {
+      API_URL_NOT_SET:'尚未設定 Apps Script API 網址。',
+      MISSING_ACTION:'系統缺少 action。',
+      INVALID_ACTION:'系統功能不存在，請確認 Apps Script 是否已部署新版。',
+      INVALID_JSON:'資料格式錯誤。',
+      LOGIN_FAILED:'帳號或密碼錯誤，或帳號已停用。',
+      INVALID_TOKEN:'登入已失效，請重新登入。',
+      ADMIN_ONLY:'此功能限管理員使用。',
+      PROJECT_NOT_FOUND:'找不到案場，或案場已停用。',
+      VEHICLE_NOT_FOUND:'找不到車輛，或車輛已停用。',
+      USER_NOT_FOUND:'找不到人員，或人員已停用。',
+      INVALID_TIME_RANGE:'結束時間不可早於或等於開始時間。',
+      INVALID_TIME_STEP:'時間只能選整點或半點。',
+      INVALID_HOUR_DECIMAL:'工時格式不符合 .0 或 .5。',
+      USERNAME_EXISTS:'帳號已存在。',
+      INVALID_ROLE:'角色錯誤。',
+      INVALID_TARGET:'管理目標錯誤。',
+      INVALID_STATUS:'狀態錯誤。',
+      NOT_FOUND:'找不到資料。',
+      ACTUAL_RECORD_NOT_FOUND:'找不到要修改的實際填報資料。',
+      MISSING_temp_plate_no:'請輸入臨時車號。'
+    };
+
+    if(code && code.startsWith('MISSING_')){
+      return `缺少必要欄位：${code.replace('MISSING_','')}`;
+    }
+
+    return map[code] || `系統錯誤：${code}`;
+  }
+</script>
+</body>
+</html>
