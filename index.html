@@ -1,0 +1,1185 @@
+const CONFIG = {
+  SPREADSHEET_ID: 'https://script.google.com/macros/s/AKfycbyaRnoq4kGWhs-Cl1xi6qe5F0RJ0EWBj6gbHwvKLJZs4ljO15lr6HEzJjKkq6ZUJmkNyQ/exec',
+  SHEETS: {
+    USERS: 'Users',
+    PROJECTS: 'Projects',
+    VEHICLES: 'Vehicles',
+    PRE: 'PreSchedule',
+    ACTUAL: 'ActualRecords',
+    SETTINGS: 'Settings'
+  },
+  TIME_STEP_MINUTES: 30,
+  LUNCH_START: '12:00',
+  LUNCH_END: '13:00'
+};
+
+function doGet(e) {
+  return handleRequest(e);
+}
+
+function doPost(e) {
+  return handleRequest(e);
+}
+
+function handleRequest(e) {
+  try {
+    const params = getParams(e);
+    const action = clean(params.action);
+
+    if (!action) return jsonFail('MISSING_ACTION');
+
+    const routes = {
+      test: test,
+      login: login,
+      getMasterData: getMasterData,
+      getMyPreSchedule: getMyPreSchedule,
+      savePreSchedule: savePreSchedule,
+      saveActualRecord: saveActualRecord,
+      getActualRecords: getActualRecords,
+      updateActualRecord: updateActualRecord,
+      getWeeklyOverview: getWeeklyOverview,
+      getStats: getStats,
+      getProjectSummary: getProjectSummary,
+      getPersonSummary: getPersonSummary,
+      adminAddUser: adminAddUser,
+      adminAddMember: adminAddMember,
+      adminAddProject: adminAddProject,
+      adminAddVehicle: adminAddVehicle,
+      adminUpdateStatus: adminUpdateStatus,
+      adminGetRecords: adminGetRecords,
+      debugUsers: debugUsers
+    };
+
+    if (!routes[action]) return jsonFail('INVALID_ACTION');
+
+    return jsonSuccess(routes[action](params));
+  } catch (err) {
+    return jsonFail(err.message || String(err));
+  }
+}
+
+function test() {
+  return {
+    message: 'API_OK',
+    spreadsheetId: CONFIG.SPREADSHEET_ID,
+    time: nowText()
+  };
+}
+
+function getParams(e) {
+  if (!e) return {};
+
+  if (e.postData && e.postData.contents) {
+    try {
+      return JSON.parse(e.postData.contents);
+    } catch (err) {
+      throw new Error('INVALID_JSON');
+    }
+  }
+
+  return e.parameter || {};
+}
+
+function ss() {
+  return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+}
+
+function sheet(name) {
+  const sh = ss().getSheetByName(name);
+  if (!sh) throw new Error('SHEET_NOT_FOUND_' + name);
+  return sh;
+}
+
+function jsonSuccess(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true, data: data }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function jsonFail(message) {
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: false, error: message }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function clean(value) {
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+}
+
+function dateKey(value) {
+  return clean(value).replaceAll('/', '-').slice(0, 10);
+}
+
+function normalizeCell(value) {
+  if (value instanceof Date) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+  }
+
+  if (value === null || value === undefined) return '';
+
+  return String(value).trim();
+}
+
+function nowText() {
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+}
+
+function readRows(sheetName) {
+  const sh = sheet(sheetName);
+  const values = sh.getDataRange().getValues();
+
+  if (values.length < 2) return [];
+
+  const headers = values[0].map(h => clean(h));
+
+  return values.slice(1)
+    .filter(row => row.some(cell => cell !== '' && cell !== null))
+    .map(row => {
+      const obj = {};
+      headers.forEach((h, i) => {
+        obj[h] = normalizeCell(row[i]);
+      });
+      return obj;
+    });
+}
+
+function appendRow(sheetName, obj) {
+  const sh = sheet(sheetName);
+  const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(h => clean(h));
+  const row = headers.map(h => obj[h] !== undefined ? obj[h] : '');
+  sh.appendRow(row);
+  return obj;
+}
+
+function updateRows(sheetName, matcher, updater) {
+  const sh = sheet(sheetName);
+  const values = sh.getDataRange().getValues();
+
+  if (values.length < 2) return 0;
+
+  const headers = values[0].map(h => clean(h));
+  let count = 0;
+
+  for (let r = 1; r < values.length; r++) {
+    const obj = {};
+
+    headers.forEach((h, i) => {
+      obj[h] = normalizeCell(values[r][i]);
+    });
+
+    if (matcher(obj)) {
+      const updated = updater(obj);
+
+      headers.forEach((h, i) => {
+        if (updated[h] !== undefined) {
+          sh.getRange(r + 1, i + 1).setValue(updated[h]);
+        }
+      });
+
+      count++;
+    }
+  }
+
+  return count;
+}
+
+function requireFields(params, fields) {
+  fields.forEach(f => {
+    if (!clean(params[f])) {
+      throw new Error('MISSING_' + f);
+    }
+  });
+}
+
+function makeId(prefix) {
+  return prefix +
+    Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMddHHmmss') +
+    String(Math.floor(Math.random() * 1000)).padStart(3, '0');
+}
+
+function makeNextCode(prefix, rows, key) {
+  let max = 0;
+
+  rows.forEach(row => {
+    const val = clean(row[key]);
+
+    if (val.startsWith(prefix)) {
+      const num = Number(val.replace(prefix, ''));
+
+      if (!isNaN(num) && num > max) {
+        max = num;
+      }
+    }
+  });
+
+  return prefix + String(max + 1).padStart(3, '0');
+}
+
+function login(params) {
+  requireFields(params, ['username', 'password']);
+
+  const username = clean(params.username);
+  const password = clean(params.password);
+  const users = readRows(CONFIG.SHEETS.USERS);
+
+  const user = users.find(u =>
+    clean(u.username) === username &&
+    clean(u.password) === password &&
+    clean(u.status).toLowerCase() === 'active'
+  );
+
+  if (!user) throw new Error('LOGIN_FAILED');
+
+  if (clean(user.role) !== 'Admin') {
+    throw new Error('ADMIN_ONLY');
+  }
+
+  const token = Utilities.getUuid();
+
+  updateRows(
+    CONFIG.SHEETS.USERS,
+    row => clean(row.user_id) === clean(user.user_id),
+    row => ({
+      ...row,
+      token: token,
+      last_login_at: nowText()
+    })
+  );
+
+  return {
+    token: token,
+    user: {
+      user_id: clean(user.user_id),
+      username: clean(user.username),
+      display_name: clean(user.display_name),
+      role: clean(user.role),
+      department: clean(user.department)
+    }
+  };
+}
+
+function findActiveUserByToken(token) {
+  const tokenValue = clean(token);
+
+  if (!tokenValue) throw new Error('INVALID_TOKEN');
+
+  const users = readRows(CONFIG.SHEETS.USERS);
+
+  const user = users.find(u =>
+    clean(u.token) === tokenValue &&
+    clean(u.status).toLowerCase() === 'active'
+  );
+
+  if (!user) throw new Error('INVALID_TOKEN');
+
+  return user;
+}
+
+function requireAdmin(token) {
+  const user = findActiveUserByToken(token);
+
+  if (clean(user.role) !== 'Admin') {
+    throw new Error('ADMIN_ONLY');
+  }
+
+  return user;
+}
+
+function getMasterData(params) {
+  requireAdmin(params.token);
+
+  const projects = readRows(CONFIG.SHEETS.PROJECTS)
+    .filter(p => clean(p.status).toLowerCase() === 'active');
+
+  const vehicles = readRows(CONFIG.SHEETS.VEHICLES)
+    .filter(v => clean(v.status).toLowerCase() === 'active');
+
+  const users = readRows(CONFIG.SHEETS.USERS)
+    .filter(u => clean(u.status).toLowerCase() === 'active')
+    .map(u => ({
+      user_id: clean(u.user_id),
+      username: clean(u.username),
+      display_name: clean(u.display_name),
+      department: clean(u.department),
+      role: clean(u.role)
+    }));
+
+  return {
+    projects: projects,
+    vehicles: vehicles,
+    users: users
+  };
+}
+
+function getActiveProject(projectId) {
+  const id = clean(projectId);
+  const projects = readRows(CONFIG.SHEETS.PROJECTS);
+
+  const project = projects.find(p =>
+    clean(p.project_id) === id &&
+    clean(p.status).toLowerCase() === 'active'
+  );
+
+  if (!project) throw new Error('PROJECT_NOT_FOUND');
+
+  return project;
+}
+
+function getActiveMember(userId) {
+  const id = clean(userId);
+  const users = readRows(CONFIG.SHEETS.USERS);
+
+  const user = users.find(u =>
+    clean(u.user_id) === id &&
+    clean(u.status).toLowerCase() === 'active'
+  );
+
+  if (!user) throw new Error('USER_NOT_FOUND');
+
+  return user;
+}
+
+function getVehicleByInput(params) {
+  const vehicleId = clean(params.vehicle_id);
+
+  if (vehicleId === 'NO_CAR') {
+    return {
+      vehicle_id: 'NO_CAR',
+      plate_no: '不使用車輛'
+    };
+  }
+
+  if (vehicleId === 'TEMP') {
+    const plateNo = clean(params.temp_plate_no);
+
+    if (!plateNo) throw new Error('MISSING_temp_plate_no');
+
+    return {
+      vehicle_id: 'TEMP',
+      plate_no: plateNo
+    };
+  }
+
+  const vehicles = readRows(CONFIG.SHEETS.VEHICLES);
+
+  const vehicle = vehicles.find(v =>
+    clean(v.vehicle_id) === vehicleId &&
+    clean(v.status).toLowerCase() === 'active'
+  );
+
+  if (!vehicle) throw new Error('VEHICLE_NOT_FOUND');
+
+  return vehicle;
+}
+
+function getMyPreSchedule(params) {
+  requireAdmin(params.token);
+
+  requireFields(params, ['work_date']);
+
+  const workDate = dateKey(params.work_date);
+  const userId = clean(params.user_id);
+
+  const rows = readRows(CONFIG.SHEETS.PRE)
+    .filter(r => {
+      if (dateKey(r.work_date) !== workDate) return false;
+      if (clean(r.status).toLowerCase() !== 'active') return false;
+      if (userId && clean(r.user_id) !== userId) return false;
+      return true;
+    });
+
+  return rows;
+}
+
+function savePreSchedule(params) {
+  requireAdmin(params.token);
+
+  requireFields(params, [
+    'user_id',
+    'work_date',
+    'project_id',
+    'vehicle_id',
+    'start_time',
+    'end_time',
+    'work_type',
+    'work_note'
+  ]);
+
+  const member = getActiveMember(params.user_id);
+  const project = getActiveProject(params.project_id);
+  const vehicle = getVehicleByInput(params);
+  const hourObj = calculateNetHours(params.start_time, params.end_time);
+  const workDate = dateKey(params.work_date);
+  const weekKey = getWeekKey(workDate);
+
+  const preId = makeId('PRE');
+  const actualId = makeId('ACT');
+
+  const preObj = {
+    record_id: preId,
+    user_id: clean(member.user_id),
+    display_name: clean(member.display_name),
+    work_date: workDate,
+    week_key: weekKey,
+    project_id: clean(project.project_id),
+    project_short_name: clean(project.project_short_name),
+    vehicle_id: clean(vehicle.vehicle_id),
+    plate_no: clean(vehicle.plate_no),
+    start_time: clean(params.start_time),
+    end_time: clean(params.end_time),
+    work_hours: hourObj.net_hours,
+    work_type: clean(params.work_type),
+    work_note: clean(params.work_note),
+    status: 'active',
+    created_at: nowText(),
+    updated_at: nowText(),
+    synced_actual_id: actualId
+  };
+
+  const actualObj = {
+    record_id: actualId,
+    source_pre_id: preId,
+    user_id: clean(member.user_id),
+    display_name: clean(member.display_name),
+    work_date: workDate,
+    week_key: weekKey,
+    project_id: clean(project.project_id),
+    project_short_name: clean(project.project_short_name),
+    vehicle_id: clean(vehicle.vehicle_id),
+    plate_no: clean(vehicle.plate_no),
+    start_time: clean(params.start_time),
+    end_time: clean(params.end_time),
+    work_hours: hourObj.net_hours,
+    work_type: clean(params.work_type),
+    work_note: clean(params.work_note),
+    status: 'active',
+    created_at: nowText(),
+    updated_at: nowText(),
+    source_type: 'pre_sync',
+    change_reason: ''
+  };
+
+  appendRow(CONFIG.SHEETS.PRE, preObj);
+  appendRow(CONFIG.SHEETS.ACTUAL, actualObj);
+
+  return {
+    pre: preObj,
+    actual: actualObj,
+    hours: hourObj
+  };
+}
+
+function saveActualRecord(params) {
+  requireAdmin(params.token);
+
+  requireFields(params, [
+    'user_id',
+    'work_date',
+    'project_id',
+    'vehicle_id',
+    'start_time',
+    'end_time',
+    'work_type',
+    'work_note'
+  ]);
+
+  const member = getActiveMember(params.user_id);
+  const project = getActiveProject(params.project_id);
+  const vehicle = getVehicleByInput(params);
+  const hourObj = calculateNetHours(params.start_time, params.end_time);
+  const workDate = dateKey(params.work_date);
+  const weekKey = getWeekKey(workDate);
+
+  const obj = {
+    record_id: makeId('ACT'),
+    source_pre_id: clean(params.source_pre_id),
+    user_id: clean(member.user_id),
+    display_name: clean(member.display_name),
+    work_date: workDate,
+    week_key: weekKey,
+    project_id: clean(project.project_id),
+    project_short_name: clean(project.project_short_name),
+    vehicle_id: clean(vehicle.vehicle_id),
+    plate_no: clean(vehicle.plate_no),
+    start_time: clean(params.start_time),
+    end_time: clean(params.end_time),
+    work_hours: hourObj.net_hours,
+    work_type: clean(params.work_type),
+    work_note: clean(params.work_note),
+    status: 'active',
+    created_at: nowText(),
+    updated_at: nowText(),
+    source_type: clean(params.source_type) || 'manual_actual',
+    change_reason: clean(params.change_reason)
+  };
+
+  return appendRow(CONFIG.SHEETS.ACTUAL, obj);
+}
+
+function getActualRecords(params) {
+  requireAdmin(params.token);
+
+  const workDate = dateKey(params.work_date);
+  const userId = clean(params.user_id);
+  const projectId = clean(params.project_id);
+
+  const rows = readRows(CONFIG.SHEETS.ACTUAL)
+    .filter(r => {
+      if (clean(r.status).toLowerCase() !== 'active') return false;
+      if (workDate && dateKey(r.work_date) !== workDate) return false;
+      if (userId && clean(r.user_id) !== userId) return false;
+      if (projectId && clean(r.project_id) !== projectId) return false;
+      return true;
+    });
+
+  rows.sort((a, b) => {
+    const x = dateKey(a.work_date) + clean(a.project_id) + clean(a.display_name);
+    const y = dateKey(b.work_date) + clean(b.project_id) + clean(b.display_name);
+    return x.localeCompare(y);
+  });
+
+  return rows;
+}
+
+function updateActualRecord(params) {
+  requireAdmin(params.token);
+
+  requireFields(params, [
+    'record_id',
+    'user_id',
+    'work_date',
+    'project_id',
+    'vehicle_id',
+    'start_time',
+    'end_time',
+    'work_type',
+    'work_note'
+  ]);
+
+  const member = getActiveMember(params.user_id);
+  const project = getActiveProject(params.project_id);
+  const vehicle = getVehicleByInput(params);
+  const hourObj = calculateNetHours(params.start_time, params.end_time);
+  const workDate = dateKey(params.work_date);
+  const weekKey = getWeekKey(workDate);
+
+  const count = updateRows(
+    CONFIG.SHEETS.ACTUAL,
+    row => clean(row.record_id) === clean(params.record_id),
+    row => ({
+      ...row,
+      user_id: clean(member.user_id),
+      display_name: clean(member.display_name),
+      work_date: workDate,
+      week_key: weekKey,
+      project_id: clean(project.project_id),
+      project_short_name: clean(project.project_short_name),
+      vehicle_id: clean(vehicle.vehicle_id),
+      plate_no: clean(vehicle.plate_no),
+      start_time: clean(params.start_time),
+      end_time: clean(params.end_time),
+      work_hours: hourObj.net_hours,
+      work_type: clean(params.work_type),
+      work_note: clean(params.work_note),
+      updated_at: nowText(),
+      source_type: 'actual_modified',
+      change_reason: clean(params.change_reason)
+    })
+  );
+
+  if (count === 0) throw new Error('ACTUAL_RECORD_NOT_FOUND');
+
+  return {
+    updated: count,
+    hours: hourObj
+  };
+}
+
+function getWeeklyOverview(params) {
+  requireAdmin(params.token);
+
+  requireFields(params, ['week_start']);
+
+  const weekStart = parseDateOnly(dateKey(params.week_start));
+  const dates = [];
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + i);
+    dates.push(formatDateOnly(d));
+  }
+
+  const source = clean(params.source) === 'pre'
+    ? CONFIG.SHEETS.PRE
+    : CONFIG.SHEETS.ACTUAL;
+
+  const rows = readRows(source)
+    .filter(r =>
+      clean(r.status).toLowerCase() === 'active' &&
+      dates.includes(dateKey(r.work_date))
+    );
+
+  const projects = readRows(CONFIG.SHEETS.PROJECTS)
+    .filter(p => clean(p.status).toLowerCase() === 'active');
+
+  const result = {
+    source: clean(params.source) === 'pre' ? 'pre' : 'actual',
+    week_start: dateKey(params.week_start),
+    week_end: dates[6],
+    dates: dates,
+    projects: [],
+    rows: rows
+  };
+
+  projects.forEach(project => {
+    const item = {
+      project_id: clean(project.project_id),
+      project_short_name: clean(project.project_short_name),
+      days: {}
+    };
+
+    dates.forEach(date => {
+      const records = rows.filter(r =>
+        clean(r.project_id) === clean(project.project_id) &&
+        dateKey(r.work_date) === date
+      );
+
+      item.days[date] = {
+        count: records.length,
+        hours: sum(records.map(r => Number(r.work_hours || 0))),
+        names: records.map(r => clean(r.display_name)),
+        records: records
+      };
+    });
+
+    const hasData = dates.some(date => item.days[date].count > 0);
+
+    if (hasData) result.projects.push(item);
+  });
+
+  return result;
+}
+
+function getStats(params) {
+  requireAdmin(params.token);
+
+  const rows = readRows(CONFIG.SHEETS.ACTUAL)
+    .filter(r => clean(r.status).toLowerCase() === 'active');
+
+  const today = clean(params.base_date)
+    ? parseDateOnly(dateKey(params.base_date))
+    : new Date();
+
+  const weekStart = getMonday(today);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+
+  const year = today.getFullYear();
+  const month = today.getMonth();
+
+  const weekly = rows.filter(r => {
+    const d = parseDateOnly(dateKey(r.work_date));
+    return d >= weekStart && d <= weekEnd;
+  });
+
+  const monthly = rows.filter(r => {
+    const d = parseDateOnly(dateKey(r.work_date));
+    return d.getFullYear() === year && d.getMonth() === month;
+  });
+
+  const yearly = rows.filter(r => {
+    const d = parseDateOnly(dateKey(r.work_date));
+    return d.getFullYear() === year;
+  });
+
+  return {
+    weekly: makeStat(weekly),
+    monthly: makeStat(monthly),
+    yearly: makeStat(yearly)
+  };
+}
+
+function makeStat(rows) {
+  return {
+    count: rows.length,
+    hours: sum(rows.map(r => Number(r.work_hours || 0)))
+  };
+}
+
+function getProjectSummary(params) {
+  requireAdmin(params.token);
+
+  const mode = clean(params.mode) || 'week';
+  const baseDate = clean(params.base_date)
+    ? parseDateOnly(dateKey(params.base_date))
+    : new Date();
+
+  const range = getRangeByMode(mode, baseDate);
+
+  const rows = readRows(CONFIG.SHEETS.ACTUAL)
+    .filter(r => {
+      if (clean(r.status).toLowerCase() !== 'active') return false;
+      const d = parseDateOnly(dateKey(r.work_date));
+      return d >= range.startDate && d <= range.endDate;
+    });
+
+  const projectMap = {};
+
+  rows.forEach(r => {
+    const pid = clean(r.project_id);
+    const pname = clean(r.project_short_name);
+    const uid = clean(r.user_id);
+    const uname = clean(r.display_name);
+
+    if (!projectMap[pid]) {
+      projectMap[pid] = {
+        project_id: pid,
+        project_short_name: pname,
+        count: 0,
+        hours: 0,
+        users: {}
+      };
+    }
+
+    projectMap[pid].count += 1;
+    projectMap[pid].hours += Number(r.work_hours || 0);
+
+    if (!projectMap[pid].users[uid]) {
+      projectMap[pid].users[uid] = {
+        user_id: uid,
+        display_name: uname,
+        count: 0,
+        hours: 0,
+        dates: []
+      };
+    }
+
+    projectMap[pid].users[uid].count += 1;
+    projectMap[pid].users[uid].hours += Number(r.work_hours || 0);
+
+    const dkey = dateKey(r.work_date);
+    if (!projectMap[pid].users[uid].dates.includes(dkey)) {
+      projectMap[pid].users[uid].dates.push(dkey);
+    }
+  });
+
+  const projects = Object.values(projectMap).map(p => {
+    const users = Object.values(p.users).map(u => ({
+      user_id: u.user_id,
+      display_name: u.display_name,
+      count: u.count,
+      hours: Math.round(u.hours * 10) / 10,
+      dates: u.dates.sort()
+    }));
+
+    return {
+      project_id: p.project_id,
+      project_short_name: p.project_short_name,
+      count: p.count,
+      people_count: users.length,
+      hours: Math.round(p.hours * 10) / 10,
+      users: users.sort((a, b) => b.hours - a.hours)
+    };
+  });
+
+  projects.sort((a, b) => b.hours - a.hours);
+
+  return {
+    mode: mode,
+    start_date: formatDateOnly(range.startDate),
+    end_date: formatDateOnly(range.endDate),
+    projects: projects
+  };
+}
+
+function getPersonSummary(params) {
+  requireAdmin(params.token);
+
+  const mode = clean(params.mode) || 'week';
+  const baseDate = clean(params.base_date)
+    ? parseDateOnly(dateKey(params.base_date))
+    : new Date();
+
+  const range = getRangeByMode(mode, baseDate);
+
+  const rows = readRows(CONFIG.SHEETS.ACTUAL)
+    .filter(r => {
+      if (clean(r.status).toLowerCase() !== 'active') return false;
+      const d = parseDateOnly(dateKey(r.work_date));
+      return d >= range.startDate && d <= range.endDate;
+    });
+
+  const personMap = {};
+
+  rows.forEach(r => {
+    const uid = clean(r.user_id);
+    const uname = clean(r.display_name);
+    const pid = clean(r.project_id);
+    const pname = clean(r.project_short_name);
+    const dkey = dateKey(r.work_date);
+
+    if (!personMap[uid]) {
+      personMap[uid] = {
+        user_id: uid,
+        display_name: uname,
+        count: 0,
+        hours: 0,
+        projects: {},
+        records: []
+      };
+    }
+
+    personMap[uid].count += 1;
+    personMap[uid].hours += Number(r.work_hours || 0);
+
+    if (!personMap[uid].projects[pid]) {
+      personMap[uid].projects[pid] = {
+        project_id: pid,
+        project_short_name: pname
+      };
+    }
+
+    personMap[uid].records.push({
+      record_id: clean(r.record_id),
+      work_date: dkey,
+      project_id: pid,
+      project_short_name: pname,
+      plate_no: clean(r.plate_no),
+      start_time: clean(r.start_time),
+      end_time: clean(r.end_time),
+      work_hours: Number(r.work_hours || 0),
+      work_type: clean(r.work_type),
+      work_note: clean(r.work_note)
+    });
+  });
+
+  const people = Object.values(personMap).map(p => ({
+    user_id: p.user_id,
+    display_name: p.display_name,
+    count: p.count,
+    hours: Math.round(p.hours * 10) / 10,
+    project_count: Object.keys(p.projects).length,
+    projects: Object.values(p.projects),
+    records: p.records.sort((a, b) => a.work_date.localeCompare(b.work_date))
+  }));
+
+  people.sort((a, b) => b.hours - a.hours);
+
+  return {
+    mode: mode,
+    start_date: formatDateOnly(range.startDate),
+    end_date: formatDateOnly(range.endDate),
+    people: people
+  };
+}
+
+function getRangeByMode(mode, baseDate) {
+  let startDate;
+  let endDate;
+
+  if (mode === 'month') {
+    startDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
+    endDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 0);
+  } else if (mode === 'year') {
+    startDate = new Date(baseDate.getFullYear(), 0, 1);
+    endDate = new Date(baseDate.getFullYear(), 11, 31);
+  } else {
+    startDate = getMonday(baseDate);
+    endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + 6);
+  }
+
+  startDate.setHours(0, 0, 0, 0);
+  endDate.setHours(23, 59, 59, 999);
+
+  return {
+    startDate: startDate,
+    endDate: endDate
+  };
+}
+
+function adminAddUser(params) {
+  requireAdmin(params.token);
+
+  requireFields(params, [
+    'username',
+    'password',
+    'display_name',
+    'role',
+    'department'
+  ]);
+
+  const username = clean(params.username);
+  const users = readRows(CONFIG.SHEETS.USERS);
+
+  if (users.some(u => clean(u.username) === username)) {
+    throw new Error('USERNAME_EXISTS');
+  }
+
+  const role = clean(params.role);
+
+  if (!['User', 'Admin'].includes(role)) {
+    throw new Error('INVALID_ROLE');
+  }
+
+  const obj = {
+    user_id: makeNextCode('U', users, 'user_id'),
+    username: username,
+    password: clean(params.password),
+    display_name: clean(params.display_name),
+    role: role,
+    department: clean(params.department),
+    status: 'active',
+    created_at: nowText(),
+    token: '',
+    last_login_at: ''
+  };
+
+  return appendRow(CONFIG.SHEETS.USERS, obj);
+}
+
+function adminAddMember(params) {
+  requireAdmin(params.token);
+
+  requireFields(params, [
+    'display_name',
+    'department'
+  ]);
+
+  const users = readRows(CONFIG.SHEETS.USERS);
+  const userId = makeNextCode('U', users, 'user_id');
+
+  const obj = {
+    user_id: userId,
+    username: '',
+    password: '',
+    display_name: clean(params.display_name),
+    role: 'User',
+    department: clean(params.department),
+    status: 'active',
+    created_at: nowText(),
+    token: '',
+    last_login_at: ''
+  };
+
+  return appendRow(CONFIG.SHEETS.USERS, obj);
+}
+
+function adminAddProject(params) {
+  const admin = requireAdmin(params.token);
+
+  requireFields(params, [
+    'project_short_name',
+    'project_full_name',
+    'location'
+  ]);
+
+  const projects = readRows(CONFIG.SHEETS.PROJECTS);
+
+  const obj = {
+    project_id: makeNextCode('A', projects, 'project_id'),
+    project_short_name: clean(params.project_short_name),
+    project_full_name: clean(params.project_full_name),
+    location: clean(params.location),
+    status: 'active',
+    created_by: clean(admin.username),
+    created_at: nowText()
+  };
+
+  return appendRow(CONFIG.SHEETS.PROJECTS, obj);
+}
+
+function adminAddVehicle(params) {
+  requireAdmin(params.token);
+
+  requireFields(params, [
+    'plate_no',
+    'vehicle_name',
+    'vehicle_type'
+  ]);
+
+  const vehicles = readRows(CONFIG.SHEETS.VEHICLES);
+
+  const obj = {
+    vehicle_id: makeNextCode('V', vehicles, 'vehicle_id'),
+    plate_no: clean(params.plate_no),
+    vehicle_name: clean(params.vehicle_name),
+    vehicle_type: clean(params.vehicle_type),
+    status: 'active',
+    created_at: nowText()
+  };
+
+  return appendRow(CONFIG.SHEETS.VEHICLES, obj);
+}
+
+function adminUpdateStatus(params) {
+  requireAdmin(params.token);
+
+  requireFields(params, [
+    'target',
+    'id',
+    'status'
+  ]);
+
+  const map = {
+    user: {
+      sheet: CONFIG.SHEETS.USERS,
+      key: 'user_id'
+    },
+    project: {
+      sheet: CONFIG.SHEETS.PROJECTS,
+      key: 'project_id'
+    },
+    vehicle: {
+      sheet: CONFIG.SHEETS.VEHICLES,
+      key: 'vehicle_id'
+    },
+    pre: {
+      sheet: CONFIG.SHEETS.PRE,
+      key: 'record_id'
+    },
+    actual: {
+      sheet: CONFIG.SHEETS.ACTUAL,
+      key: 'record_id'
+    }
+  };
+
+  const target = map[clean(params.target)];
+
+  if (!target) throw new Error('INVALID_TARGET');
+
+  const status = clean(params.status).toLowerCase();
+
+  if (!['active', 'disabled', 'deleted'].includes(status)) {
+    throw new Error('INVALID_STATUS');
+  }
+
+  const count = updateRows(
+    target.sheet,
+    row => clean(row[target.key]) === clean(params.id),
+    row => ({
+      ...row,
+      status: status,
+      updated_at: nowText()
+    })
+  );
+
+  if (count === 0) throw new Error('NOT_FOUND');
+
+  return {
+    updated: count
+  };
+}
+
+function adminGetRecords(params) {
+  requireAdmin(params.token);
+
+  requireFields(params, ['target']);
+
+  const map = {
+    users: CONFIG.SHEETS.USERS,
+    projects: CONFIG.SHEETS.PROJECTS,
+    vehicles: CONFIG.SHEETS.VEHICLES,
+    pre: CONFIG.SHEETS.PRE,
+    actual: CONFIG.SHEETS.ACTUAL
+  };
+
+  const sheetName = map[clean(params.target)];
+
+  if (!sheetName) throw new Error('INVALID_TARGET');
+
+  return readRows(sheetName);
+}
+
+function calculateNetHours(start, end) {
+  const s = parseTimeToMinutes(start);
+  const e = parseTimeToMinutes(end);
+
+  if (e <= s) throw new Error('INVALID_TIME_RANGE');
+
+  if (s % CONFIG.TIME_STEP_MINUTES !== 0 || e % CONFIG.TIME_STEP_MINUTES !== 0) {
+    throw new Error('INVALID_TIME_STEP');
+  }
+
+  const lunchStart = parseTimeToMinutes(CONFIG.LUNCH_START);
+  const lunchEnd = parseTimeToMinutes(CONFIG.LUNCH_END);
+
+  const gross = (e - s) / 60;
+  const lunchOverlap = Math.max(0, Math.min(e, lunchEnd) - Math.max(s, lunchStart)) / 60;
+  const net = gross - lunchOverlap;
+
+  if ((net * 10) % 5 !== 0) {
+    throw new Error('INVALID_HOUR_DECIMAL');
+  }
+
+  return {
+    gross_hours: Math.round(gross * 10) / 10,
+    lunch_deduction: Math.round(lunchOverlap * 10) / 10,
+    net_hours: Math.round(net * 10) / 10
+  };
+}
+
+function parseTimeToMinutes(text) {
+  const value = clean(text);
+  const parts = value.split(':');
+
+  if (parts.length !== 2) throw new Error('INVALID_TIME_FORMAT');
+
+  const h = Number(parts[0]);
+  const m = Number(parts[1]);
+
+  if (isNaN(h) || isNaN(m)) throw new Error('INVALID_TIME_NUMBER');
+  if (h < 0 || h > 23 || m < 0 || m > 59) throw new Error('INVALID_TIME_VALUE');
+
+  return h * 60 + m;
+}
+
+function parseDateOnly(text) {
+  const value = dateKey(text);
+  const parts = value.split('-').map(Number);
+
+  if (parts.length !== 3) throw new Error('INVALID_DATE_FORMAT');
+
+  const y = parts[0];
+  const m = parts[1];
+  const d = parts[2];
+
+  if (!y || !m || !d || isNaN(y) || isNaN(m) || isNaN(d)) {
+    throw new Error('INVALID_DATE_VALUE');
+  }
+
+  return new Date(y, m - 1, d);
+}
+
+function formatDateOnly(date) {
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+function getMonday(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+
+  return d;
+}
+
+function getWeekKey(dateText) {
+  const d = parseDateOnly(dateText);
+  const monday = getMonday(d);
+  return formatDateOnly(monday);
+}
+
+function sum(arr) {
+  const total = arr.reduce((a, b) => a + Number(b || 0), 0);
+  return Math.round(total * 10) / 10;
+}
+
+function debugUsers() {
+  const users = readRows(CONFIG.SHEETS.USERS);
+  Logger.log(JSON.stringify(users, null, 2));
+  return users;
+}
